@@ -117,7 +117,7 @@ public class SrsEncoder {
         // vencoder yuv to 264 es stream.
         // requires sdk level 16+, Android 4.1, 4.1.1, the JELLY_BEAN
         try {
-            mVideoColorFormat = MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible;
+            mVideoColorFormat = MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Planar;
 
             // setup the vencoder.
             // Note: landscape to portrait, 90 degree rotation, so we need to switch width and height in configuration
@@ -249,7 +249,7 @@ public class SrsEncoder {
     }
 
     public void setVideoHDMode() {
-        vBitrate = 3600 * 1024;  // 1200 kbps
+        vBitrate = 1200 * 1024;  // 1200 kbps
         x264Preset = "veryfast";
     }
 
@@ -426,10 +426,10 @@ public class SrsEncoder {
 
     public byte[] ARGBtoYUVscaled(int[] data, int width, int height, Rect boundingBox) {
         switch (mVideoColorFormat) {
-            case MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible:
-                return ARGBToI420Scaled(data, width, height, false, 0, boundingBox.left, boundingBox.top, boundingBox.width(), boundingBox.height());
+            case MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Planar:
+                return ARGBToI420Scaled(data, width, height, false, 270, boundingBox.left, boundingBox.top, boundingBox.width(), boundingBox.height());
             case MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar:
-                return ARGBToNV12Scaled(data, width, height, false, 0, boundingBox.left, boundingBox.top, boundingBox.width(), boundingBox.height());
+                return ARGBToNV12Scaled(data, width, height, false, 270, boundingBox.left, boundingBox.top, boundingBox.width(), boundingBox.height());
             default:
                 throw new IllegalStateException("Unsupported color format!");
         }
