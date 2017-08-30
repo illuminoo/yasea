@@ -42,7 +42,6 @@ public class SrsFlvMuxer {
     private static final int VIDEO_TRACK = 100;
     private static final int AUDIO_TRACK = 101;
     private static final String TAG = "SrsFlvMuxer";
-    private volatile boolean syncKeyFrame = false;
 
     /**
      * constructor.
