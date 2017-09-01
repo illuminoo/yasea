@@ -379,6 +379,10 @@ public class SrsEncoder {
         encodeYuvFrame(RGBAtoYUV(data, width, height));
     }
 
+    public void onGetYuvNV21Frame(byte[] data, int width, int height) {
+//        encodeYuvFrame(NV21toYUVscaled(data, width, height, boundingBox));
+    }
+
     public void onGetYuvNV21Frame(byte[] data, int width, int height, Rect boundingBox) {
         encodeYuvFrame(NV21toYUVscaled(data, width, height, boundingBox));
     }
