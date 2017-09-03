@@ -63,6 +63,9 @@ public class SrsEncoder {
     private int audioFlvTrack;
     private int audioMp4Track;
 
+    private int rotate = 0;
+    private int rotateFlip = 180;
+
     // Y, U (Cb) and V (Cr)
     // yuv420                     yuv yuv yuv yuv
     // yuv420p (planar)   yyyy*2 uu vv
@@ -285,6 +288,16 @@ public class SrsEncoder {
         setEncoderResolution(vOutWidth, vOutHeight);
     }
 
+    public void setCameraOrientation(int degrees) {
+        if (degrees<0) {
+            rotate = 360 + degrees;
+            rotateFlip = 180 - degrees;
+        } else {
+            rotate = degrees;
+            rotateFlip = 180 + degrees;
+        }
+    }
+
     private void encodeYuvFrame(byte[] yuvFrame, long pts) {
         int inBufferIndex = vencoder.dequeueInputBuffer(-1);
         if (inBufferIndex >= 0) {
@@ -409,9 +422,9 @@ public class SrsEncoder {
     public byte[] RGBAtoYUV(byte[] data, int width, int height) {
         switch (mVideoColorFormat) {
             case MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Planar:
-                return RGBAToI420(data, width, height, true, 180);
+                return RGBAToI420(data, width, height, true, rotateFlip);
             case MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar:
-                return RGBAToNV12(data, width, height, true, 180);
+                return RGBAToNV12(data, width, height, true, rotateFlip);
             default:
                 throw new IllegalStateException("Unsupported color format!");
         }
@@ -420,9 +433,9 @@ public class SrsEncoder {
     public byte[] NV21toYUVscaled(byte[] data, int width, int height, Rect boundingBox) {
         switch (mVideoColorFormat) {
             case MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Planar:
-                return NV21ToI420Scaled(data, width, height, true, 180, boundingBox.left, boundingBox.top, boundingBox.width(), boundingBox.height());
+                return NV21ToI420Scaled(data, width, height, true, rotateFlip, boundingBox.left, boundingBox.top, boundingBox.width(), boundingBox.height());
             case MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar:
-                return NV21ToNV12Scaled(data, width, height, true, 180, boundingBox.left, boundingBox.top, boundingBox.width(), boundingBox.height());
+                return NV21ToNV12Scaled(data, width, height, true, rotateFlip, boundingBox.left, boundingBox.top, boundingBox.width(), boundingBox.height());
             default:
                 throw new IllegalStateException("Unsupported color format!");
         }
@@ -431,9 +444,9 @@ public class SrsEncoder {
     public byte[] ARGBtoYUVscaled(int[] data, int width, int height, Rect boundingBox) {
         switch (mVideoColorFormat) {
             case MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Planar:
-                return ARGBToI420Scaled(data, width, height, false, 270, boundingBox.left, boundingBox.top, boundingBox.width(), boundingBox.height());
+                return ARGBToI420Scaled(data, width, height, false, rotate, boundingBox.left, boundingBox.top, boundingBox.width(), boundingBox.height());
             case MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar:
-                return ARGBToNV12Scaled(data, width, height, false, 270, boundingBox.left, boundingBox.top, boundingBox.width(), boundingBox.height());
+                return ARGBToNV12Scaled(data, width, height, false, rotate, boundingBox.left, boundingBox.top, boundingBox.width(), boundingBox.height());
             default:
                 throw new IllegalStateException("Unsupported color format!");
         }
@@ -442,9 +455,9 @@ public class SrsEncoder {
     public byte[] ARGBtoYUV(int[] data, int inputWidth, int inputHeight) {
         switch (mVideoColorFormat) {
             case MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible:
-                return ARGBToI420(data, inputWidth, inputHeight, false, 0);
+                return ARGBToI420(data, inputWidth, inputHeight, false, rotate);
             case MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar:
-                return ARGBToNV12(data, inputWidth, inputHeight, false, 0);
+                return ARGBToNV12(data, inputWidth, inputHeight, false, rotate);
             default:
                 throw new IllegalStateException("Unsupported color format!");
         }
