@@ -1,9 +1,11 @@
 package net.ossrs.yasea;
 
 import android.content.res.Configuration;
+import android.graphics.ImageFormat;
 import android.graphics.Rect;
 import android.media.AudioFormat;
 import android.media.AudioRecord;
+import android.media.Image;
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
 import android.media.MediaCodecList;
@@ -65,6 +67,13 @@ public class SrsEncoder {
 
     private int rotate = 0;
     private int rotateFlip = 180;
+
+    private int vInputWidth;
+    private int vInputHeight;
+
+    private byte[] y_frame;
+    private byte[] u_frame;
+    private byte[] v_frame;
 
     // Y, U (Cb) and V (Cr)
     // yuv420                     yuv yuv yuv yuv
@@ -129,7 +138,7 @@ public class SrsEncoder {
             videoFormat.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 0);
             videoFormat.setInteger(MediaFormat.KEY_BIT_RATE, vBitrate);
             videoFormat.setInteger(MediaFormat.KEY_FRAME_RATE, VFPS);
-            videoFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, VGOP/VFPS);
+            videoFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, VGOP / VFPS);
 
             String videoCodecName = list.findEncoderForFormat(videoFormat);
             vencoder = MediaCodec.createByCodecName(videoCodecName);
@@ -242,6 +251,15 @@ public class SrsEncoder {
         vLandscapeHeight = width;
     }
 
+    public void setInputResolution(int width, int height) {
+        vInputWidth = width;
+        vInputHeight = height;
+
+        y_frame = new byte[width * height];
+        u_frame = new byte[(width * height) / 2 - 1];
+        v_frame = new byte[(width * height) / 2 - 1];
+    }
+
     public void setLandscapeResolution(int width, int height) {
         vOutWidth = width;
         vOutHeight = height;
@@ -289,7 +307,7 @@ public class SrsEncoder {
     }
 
     public void setCameraOrientation(int degrees) {
-        if (degrees<0) {
+        if (degrees < 0) {
             rotate = 360 + degrees;
             rotateFlip = 180 - degrees;
         } else {
@@ -308,7 +326,7 @@ public class SrsEncoder {
     }
 
     public void muxAnnexbFrames() {
-        for (;;) {
+        for (; ; ) {
             int outBufferIndex = vencoder.dequeueOutputBuffer(vebi, 0);
             if (outBufferIndex >= 0) {
                 ByteBuffer bb = vencoder.getOutputBuffer(outBufferIndex);
@@ -392,20 +410,16 @@ public class SrsEncoder {
         encodeYuvFrame(RGBAtoYUV(data, width, height));
     }
 
-    public void onGetYuvNV21Frame(byte[] data, int width, int height) {
-//        encodeYuvFrame(NV21toYUVscaled(data, width, height, boundingBox));
-    }
-
     public void onGetYuvNV21Frame(byte[] data, int width, int height, Rect boundingBox) {
-        encodeYuvFrame(NV21toYUVscaled(data, width, height, boundingBox));
+        encodeYuvFrame(NV21toYUV(data, width, height, boundingBox));
     }
 
-    public void onGetArgbFrame(int[] data, int width, int height) {
-        encodeYuvFrame(ARGBtoYUV(data, width, height));
+    public void onGetImageFrame(Image image, Rect boundingBox) {
+        encodeYuvFrame(YUV420_888toYUV(image, boundingBox));
     }
 
     public void onGetArgbFrame(int[] data, int width, int height, Rect boundingBox) {
-        encodeYuvFrame(ARGBtoYUVscaled(data, width, height, boundingBox));
+        encodeYuvFrame(ARGBtoYUV(data, width, height, boundingBox));
     }
 
     public void encodeYuvFrame(byte[] frame) {
@@ -414,7 +428,7 @@ public class SrsEncoder {
     }
 
     public void onGetH264Frame(byte[] frame) {
-        if (frame!=null) {
+        if (frame != null) {
             onSoftEncodedData(frame, System.nanoTime() / 1000 - mPresentTimeUs, false);
         }
     }
@@ -430,34 +444,32 @@ public class SrsEncoder {
         }
     }
 
-    public byte[] NV21toYUVscaled(byte[] data, int width, int height, Rect boundingBox) {
+    public byte[] NV21toYUV(byte[] data, int width, int height, Rect boundingBox) {
         switch (mVideoColorFormat) {
             case MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Planar:
-                return NV21ToI420Scaled(data, width, height, true, rotateFlip, boundingBox.left, boundingBox.top, boundingBox.width(), boundingBox.height());
+                return NV21ToI420(data, width, height, true, rotateFlip, boundingBox.left, boundingBox.top, boundingBox.width(), boundingBox.height());
             case MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar:
-                return NV21ToNV12Scaled(data, width, height, true, rotateFlip, boundingBox.left, boundingBox.top, boundingBox.width(), boundingBox.height());
+                return NV21ToNV12(data, width, height, true, rotateFlip, boundingBox.left, boundingBox.top, boundingBox.width(), boundingBox.height());
             default:
                 throw new IllegalStateException("Unsupported color format!");
         }
     }
 
-    public byte[] ARGBtoYUVscaled(int[] data, int width, int height, Rect boundingBox) {
-        switch (mVideoColorFormat) {
-            case MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Planar:
-                return ARGBToI420Scaled(data, width, height, false, rotate, boundingBox.left, boundingBox.top, boundingBox.width(), boundingBox.height());
-            case MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar:
-                return ARGBToNV12Scaled(data, width, height, false, rotate, boundingBox.left, boundingBox.top, boundingBox.width(), boundingBox.height());
-            default:
-                throw new IllegalStateException("Unsupported color format!");
-        }
+    public byte[] YUV420_888toYUV(Image image, Rect cropArea) {
+        Image.Plane[] planes = image.getPlanes();
+        planes[0].getBuffer().get(y_frame);
+        planes[1].getBuffer().get(u_frame);
+        planes[2].getBuffer().get(v_frame);
+        return YUV420_888toI420(y_frame, u_frame, v_frame, vInputWidth, vInputHeight, false, 0,
+                cropArea.left, cropArea.top, cropArea.width(), cropArea.height());
     }
 
-    public byte[] ARGBtoYUV(int[] data, int inputWidth, int inputHeight) {
+    public byte[] ARGBtoYUV(int[] data, int width, int height, Rect boundingBox) {
         switch (mVideoColorFormat) {
-            case MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible:
-                return ARGBToI420(data, inputWidth, inputHeight, false, rotate);
+            case MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Planar:
+                return ARGBToI420(data, width, height, false, rotate, boundingBox.left, boundingBox.top, boundingBox.width(), boundingBox.height());
             case MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar:
-                return ARGBToNV12(data, inputWidth, inputHeight, false, rotate);
+                return ARGBToNV12(data, width, height, false, rotate, boundingBox.left, boundingBox.top, boundingBox.width(), boundingBox.height());
             default:
                 throw new IllegalStateException("Unsupported color format!");
         }
@@ -469,10 +481,10 @@ public class SrsEncoder {
 
     public AudioRecord chooseAudioRecord() {
         AudioRecord mic = new AudioRecord(MediaRecorder.AudioSource.DEFAULT, SrsEncoder.ASAMPLERATE,
-            AudioFormat.CHANNEL_IN_STEREO, AudioFormat.ENCODING_PCM_16BIT, getPcmBufferSize() * 4);
+                AudioFormat.CHANNEL_IN_STEREO, AudioFormat.ENCODING_PCM_16BIT, getPcmBufferSize() * 4);
         if (mic.getState() != AudioRecord.STATE_INITIALIZED) {
             mic = new AudioRecord(MediaRecorder.AudioSource.DEFAULT, SrsEncoder.ASAMPLERATE,
-                AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, getPcmBufferSize() * 4);
+                    AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, getPcmBufferSize() * 4);
             if (mic.getState() != AudioRecord.STATE_INITIALIZED) {
                 mic = null;
             } else {
@@ -487,25 +499,38 @@ public class SrsEncoder {
 
     public int getPcmBufferSize() {
         int pcmBufSize = AudioRecord.getMinBufferSize(ASAMPLERATE, AudioFormat.CHANNEL_IN_STEREO,
-            AudioFormat.ENCODING_PCM_16BIT) + 8191;
+                AudioFormat.ENCODING_PCM_16BIT) + 8191;
         return pcmBufSize - (pcmBufSize % 8192);
     }
 
     private native void setEncoderResolution(int outWidth, int outHeight);
+
     private native void setEncoderFps(int fps);
+
     private native void setEncoderGop(int gop);
+
     private native void setEncoderBitrate(int bitrate);
+
     private native void setEncoderPreset(String preset);
-    private native byte[] RGBAToI420(byte[] rgbaFrame, int width, int height, boolean flip, int rotate);
-    private native byte[] RGBAToNV12(byte[] rgbaFrame, int width, int height, boolean flip, int rotate);
-    private native byte[] ARGBToI420Scaled(int[] rgbaFrame, int width, int height, boolean flip, int rotate, int crop_x, int crop_y,int crop_width, int crop_height);
-    private native byte[] ARGBToNV12Scaled(int[] rgbaFrame, int width, int height, boolean flip, int rotate, int crop_x, int crop_y,int crop_width, int crop_height);
-    private native byte[] ARGBToI420(int[] rgbaFrame, int width, int height, boolean flip, int rotate);
-    private native byte[] ARGBToNV12(int[] rgbaFrame, int width, int height, boolean flip, int rotate);
-    private native byte[] NV21ToNV12Scaled(byte[] rgbaFrame, int width, int height, boolean flip, int rotate, int crop_x, int crop_y,int crop_width, int crop_height);
-    private native byte[] NV21ToI420Scaled(byte[] rgbaFrame, int width, int height, boolean flip, int rotate, int crop_x, int crop_y,int crop_width, int crop_height);
-    private native int RGBASoftEncode(byte[] rgbaFrame, int width, int height, boolean flip, int rotate, long pts);
+
+    private native byte[] RGBAToI420(byte[] frame, int width, int height, boolean flip, int rotate);
+
+    private native byte[] RGBAToNV12(byte[] frame, int width, int height, boolean flip, int rotate);
+
+    private native byte[] ARGBToI420(int[] frame, int width, int height, boolean flip, int rotate, int crop_x, int crop_y, int crop_width, int crop_height);
+
+    private native byte[] YUV420_888toI420(byte[] y_frame, byte[] u_frame, byte[] v_frame, int width, int height, boolean flip, int rotate, int crop_x, int crop_y, int crop_width, int crop_height);
+
+    private native byte[] ARGBToNV12(int[] frame, int width, int height, boolean flip, int rotate, int crop_x, int crop_y, int crop_width, int crop_height);
+
+    private native byte[] NV21ToNV12(byte[] frame, int width, int height, boolean flip, int rotate, int crop_x, int crop_y, int crop_width, int crop_height);
+
+    private native byte[] NV21ToI420(byte[] frame, int width, int height, boolean flip, int rotate, int crop_x, int crop_y, int crop_width, int crop_height);
+
+    private native int RGBASoftEncode(byte[] frame, int width, int height, boolean flip, int rotate, long pts);
+
     private native boolean openSoftEncoder();
+
     private native void closeSoftEncoder();
 
     static {

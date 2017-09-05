@@ -54,40 +54,65 @@ static const int DST_COLOR_FMT = FOURCC_NV12;
 static struct YuvFrame i420_rotated_frame;
 static struct YuvFrame i420_scaled_frame;
 static struct YuvFrame nv12_frame;
+static struct YuvFrame i420_src_frame;
 
+/**
+ * Convert frames to I420
+ * @param src_frame
+ * @param src_width
+ * @param src_height
+ * @param crop_x
+ * @param crop_y
+ * @param crop_width
+ * @param crop_height
+ * @param need_flip
+ * @param rotate_degree
+ * @param format
+ * @return
+ */
 static bool convert_to_i420(uint8_t *src_frame, jint src_width, jint src_height,
+                            jint crop_x, jint crop_y, jint crop_width,
+                            jint crop_height,
                             jboolean need_flip, jint rotate_degree, int format) {
+
     int y_size = src_width * src_height;
+    int r_crop_width = crop_width;
+    int r_crop_height = crop_height;
 
     if (rotate_degree % 180 == 0) {
         if (i420_rotated_frame.width != src_width || i420_rotated_frame.height != src_height) {
             free(i420_rotated_frame.data);
-            i420_rotated_frame.width = src_width;
-            i420_rotated_frame.height = src_height;
-            i420_rotated_frame.data = (uint8_t *) malloc(y_size * 4 / 2);
+            i420_rotated_frame.data = (uint8_t *) malloc(y_size * 3 / 2);
             i420_rotated_frame.y = i420_rotated_frame.data;
             i420_rotated_frame.u = i420_rotated_frame.y + y_size;
             i420_rotated_frame.v = i420_rotated_frame.u + y_size / 4;
+
+            i420_rotated_frame.width = src_width;
+            i420_rotated_frame.height = src_height;
         }
     } else {
         if (i420_rotated_frame.width != src_height || i420_rotated_frame.height != src_width) {
             free(i420_rotated_frame.data);
-            i420_rotated_frame.width = src_height;
-            i420_rotated_frame.height = src_width;
-            i420_rotated_frame.data = (uint8_t *) malloc(y_size * 4 / 2);
+            i420_rotated_frame.data = (uint8_t *) malloc(y_size * 3 / 2);
             i420_rotated_frame.y = i420_rotated_frame.data;
             i420_rotated_frame.u = i420_rotated_frame.y + y_size;
             i420_rotated_frame.v = i420_rotated_frame.u + y_size / 4;
+
+            i420_rotated_frame.width = src_height;
+            i420_rotated_frame.height = src_width;
+
+            r_crop_width = crop_height;
+            r_crop_height = crop_width;
         }
     }
 
     jint ret = ConvertToI420(src_frame, y_size,
-                             i420_rotated_frame.y, i420_rotated_frame.width,
-                             i420_rotated_frame.u, i420_rotated_frame.width / 2,
-                             i420_rotated_frame.v, i420_rotated_frame.width / 2,
-                             0, 0,
-                             src_width, src_height,
-                             src_width, src_height,
+                             i420_rotated_frame.y, r_crop_width,
+                             i420_rotated_frame.u, r_crop_width / 2,
+                             i420_rotated_frame.v, r_crop_width / 2,
+                             crop_x, crop_y,
+                             src_width, need_flip ? -src_height : src_height,
+                             r_crop_width, r_crop_height,
                              (RotationMode) rotate_degree, format);
     if (ret < 0) {
         LIBENC_LOGE("ConvertToI420 failure");
@@ -95,10 +120,9 @@ static bool convert_to_i420(uint8_t *src_frame, jint src_width, jint src_height,
     }
 
     ret = I420Scale(i420_rotated_frame.y, i420_rotated_frame.width,
-                    i420_rotated_frame.u, i420_rotated_frame.width / 2,
-                    i420_rotated_frame.v, i420_rotated_frame.width / 2,
-                    need_flip ? -i420_rotated_frame.width : i420_rotated_frame.width,
-                    i420_rotated_frame.height,
+                    i420_rotated_frame.u, r_crop_width / 2,
+                    i420_rotated_frame.v, r_crop_width / 2,
+                    r_crop_width, r_crop_height,
                     i420_scaled_frame.y, i420_scaled_frame.width,
                     i420_scaled_frame.u, i420_scaled_frame.width / 2,
                     i420_scaled_frame.v, i420_scaled_frame.width / 2,
@@ -113,11 +137,31 @@ static bool convert_to_i420(uint8_t *src_frame, jint src_width, jint src_height,
     return true;
 }
 
-static bool convert_to_i420_with_crop_scale(uint8_t *src_frame, jint src_width, jint src_height,
-                                            jint crop_x, jint crop_y, jint crop_width,
-                                            jint crop_height,
-                                            jboolean need_flip, jint rotate_degree, int format) {
+/**
+ * Crop/scale I420 frames
+ * @param src_y
+ * @param src_u
+ * @param src_v
+ * @param src_width
+ * @param src_height
+ * @param crop_x
+ * @param crop_y
+ * @param crop_width
+ * @param crop_height
+ * @param need_flip
+ * @param rotate_degree
+ * @param format
+ * @return
+ */
+static bool
+YUV420_888toI420(uint8_t *src_y, uint8_t *src_u, uint8_t *src_v, jint src_width, jint src_height,
+                 jint crop_x, jint crop_y, jint crop_width,
+                 jint crop_height,
+                 jboolean need_flip, jint rotate_degree) {
+
     int y_size = src_width * src_height;
+    int r_crop_width = crop_width;
+    int r_crop_height = crop_height;
 
     if (rotate_degree % 180 == 0) {
         if (i420_rotated_frame.width != src_width || i420_rotated_frame.height != src_height) {
@@ -126,11 +170,10 @@ static bool convert_to_i420_with_crop_scale(uint8_t *src_frame, jint src_width, 
             i420_rotated_frame.y = i420_rotated_frame.data;
             i420_rotated_frame.u = i420_rotated_frame.y + y_size;
             i420_rotated_frame.v = i420_rotated_frame.u + y_size / 4;
+
+            i420_rotated_frame.width = src_width;
+            i420_rotated_frame.height = src_height;
         }
-
-        i420_rotated_frame.width = crop_width;
-        i420_rotated_frame.height = crop_height;
-
     } else {
         if (i420_rotated_frame.width != src_height || i420_rotated_frame.height != src_width) {
             free(i420_rotated_frame.data);
@@ -138,29 +181,63 @@ static bool convert_to_i420_with_crop_scale(uint8_t *src_frame, jint src_width, 
             i420_rotated_frame.y = i420_rotated_frame.data;
             i420_rotated_frame.u = i420_rotated_frame.y + y_size;
             i420_rotated_frame.v = i420_rotated_frame.u + y_size / 4;
+
+            i420_rotated_frame.width = src_height;
+            i420_rotated_frame.height = src_width;
         }
 
-        i420_rotated_frame.width = crop_height;
-        i420_rotated_frame.height = crop_width;
+        r_crop_width = crop_height;
+        r_crop_height = crop_width;
     }
 
-    jint ret = ConvertToI420(src_frame, y_size,
-                             i420_rotated_frame.y, i420_rotated_frame.width,
-                             i420_rotated_frame.u, i420_rotated_frame.width / 2,
-                             i420_rotated_frame.v, i420_rotated_frame.width / 2,
-                             crop_x, crop_y,
-                             src_width, need_flip ? -src_height : src_height,
-                             crop_width, crop_height,
-                             (RotationMode) rotate_degree, format);
+    int halfwidth = src_width / 2;
+    int halfheight = src_height / 2;
+
+    // Convert pixel stride of 2 to 1 for UV planes
+    if (i420_src_frame.width != src_width || i420_src_frame.height != src_height) {
+        free(i420_src_frame.u);
+        free(i420_src_frame.v);
+        i420_src_frame.u = (uint8_t *) malloc(y_size / 4);
+        i420_src_frame.v = (uint8_t *) malloc(y_size / 4);
+        i420_src_frame.width = src_width;
+        i420_src_frame.height = src_height;
+    }
+    int i = 0;
+    int j;
+    for (int y = 0; y < halfheight; y++) {
+        for (int x = 0; x < halfwidth; x++) {
+            j = y * src_width + x * 2;
+            i420_src_frame.u[i] = src_u[j];
+            i420_src_frame.v[i] = src_v[j];
+            i++;
+        }
+    }
+
+    // Crop frame
+    j = src_width * (crop_y >> 2) + (crop_x >> 1);
+    const uint8 *src_yc = src_y + (src_width * crop_y + crop_x);
+    const uint8 *src_uc = i420_src_frame.u + j;
+    const uint8 *src_vc = i420_src_frame.v + j;
+
+    // Rotate frame
+    jint ret = I420Rotate(src_yc, src_width,
+                          src_uc, src_width / 2,
+                          src_vc, src_width / 2,
+                          i420_rotated_frame.y, r_crop_width,
+                          i420_rotated_frame.u, r_crop_width / 2,
+                          i420_rotated_frame.v, r_crop_width / 2,
+                          r_crop_width, r_crop_height, (RotationMode) rotate_degree);
+
     if (ret < 0) {
-        LIBENC_LOGE("ConvertToI420 failure");
+        LIBENC_LOGE("I420Rotate failure");
         return false;
     }
-//need_flip ? -i420_rotated_frame.width : i420_rotated_frame.width
-    ret = I420Scale(i420_rotated_frame.y, i420_rotated_frame.width,
-                    i420_rotated_frame.u, i420_rotated_frame.width / 2,
-                    i420_rotated_frame.v, i420_rotated_frame.width / 2,
-                    i420_rotated_frame.width, i420_rotated_frame.height,
+
+    // Scale frame
+    ret = I420Scale(i420_rotated_frame.y, r_crop_width,
+                    i420_rotated_frame.u, r_crop_width / 2,
+                    i420_rotated_frame.v, r_crop_width / 2,
+                    r_crop_width, r_crop_height,
                     i420_scaled_frame.y, i420_scaled_frame.width,
                     i420_scaled_frame.u, i420_scaled_frame.width / 2,
                     i420_scaled_frame.v, i420_scaled_frame.width / 2,
@@ -226,7 +303,9 @@ static jbyteArray libenc_RGBAToI420(JNIEnv *env, jobject thiz, jbyteArray frame,
                                     jint src_height, jboolean need_flip, jint rotate_degree) {
     jbyte *rgba_frame = env->GetByteArrayElements(frame, NULL);
 
-    if (!convert_to_i420((uint8_t *) rgba_frame, src_width, src_height, need_flip, rotate_degree,
+    if (!convert_to_i420((uint8_t *) rgba_frame, src_width, src_height, 0, 0, src_width, src_height,
+                         need_flip,
+                         rotate_degree,
                          FOURCC_RGBA)) {
         return NULL;
     }
@@ -240,14 +319,14 @@ static jbyteArray libenc_RGBAToI420(JNIEnv *env, jobject thiz, jbyteArray frame,
 }
 
 static jbyteArray
-libenc_NV21ToNV12Scaled(JNIEnv *env, jobject thiz, jbyteArray frame, jint src_width,
-                        jint src_height, jboolean need_flip, jint rotate_degree,
-                        jint crop_x, jint crop_y, jint crop_width, jint crop_height) {
+libenc_NV21ToNV12(JNIEnv *env, jobject thiz, jbyteArray frame, jint src_width,
+                  jint src_height, jboolean need_flip, jint rotate_degree,
+                  jint crop_x, jint crop_y, jint crop_width, jint crop_height) {
     jbyte *rgba_frame = env->GetByteArrayElements(frame, NULL);
 
-    if (!convert_to_i420_with_crop_scale((uint8_t *) rgba_frame, src_width, src_height,
-                                         crop_x, crop_y, crop_width, crop_height,
-                                         need_flip, rotate_degree, FOURCC_NV21)) {
+    if (!convert_to_i420((uint8_t *) rgba_frame, src_width, src_height,
+                         crop_x, crop_y, crop_width, crop_height,
+                         need_flip, rotate_degree, FOURCC_NV21)) {
         return NULL;
     }
 
@@ -271,14 +350,14 @@ libenc_NV21ToNV12Scaled(JNIEnv *env, jobject thiz, jbyteArray frame, jint src_wi
 }
 
 static jbyteArray
-libenc_NV21ToI420Scaled(JNIEnv *env, jobject thiz, jbyteArray frame, jint src_width,
-                        jint src_height, jboolean need_flip, jint rotate_degree,
-                        jint crop_x, jint crop_y, jint crop_width, jint crop_height) {
+libenc_NV21ToI420(JNIEnv *env, jobject thiz, jbyteArray frame, jint src_width,
+                  jint src_height, jboolean need_flip, jint rotate_degree,
+                  jint crop_x, jint crop_y, jint crop_width, jint crop_height) {
     jbyte *argb_frame = env->GetByteArrayElements(frame, NULL);
 
-    if (!convert_to_i420_with_crop_scale((uint8_t *) argb_frame, src_width, src_height,
-                                         crop_x, crop_y, crop_width, crop_height,
-                                         need_flip, rotate_degree, FOURCC_NV21)) {
+    if (!convert_to_i420((uint8_t *) argb_frame, src_width, src_height,
+                         crop_x, crop_y, crop_width, crop_height,
+                         need_flip, rotate_degree, FOURCC_NV21)) {
         return NULL;
     }
 
@@ -291,12 +370,15 @@ libenc_NV21ToI420Scaled(JNIEnv *env, jobject thiz, jbyteArray frame, jint src_wi
 }
 
 // For Bitmap.getPixels() ARGB_8888
-static jbyteArray libenc_ARGBToI420(JNIEnv *env, jobject thiz, jintArray frame, jint src_width,
-                                    jint src_height, jboolean need_flip, jint rotate_degree) {
+static jbyteArray
+libenc_ARGBToI420(JNIEnv *env, jobject thiz, jintArray frame, jint src_width,
+                  jint src_height, jboolean need_flip, jint rotate_degree,
+                  jint crop_x, jint crop_y, jint crop_width, jint crop_height) {
     jint *argb_frame = env->GetIntArrayElements(frame, NULL);
 
-    if (!convert_to_i420((uint8_t *) argb_frame, src_width, src_height, need_flip, rotate_degree,
-                         FOURCC_ARGB)) {
+    if (!convert_to_i420((uint8_t *) argb_frame, src_width, src_height,
+                         crop_x, crop_y, crop_width, crop_height,
+                         need_flip, rotate_degree, FOURCC_ARGB)) {
         return NULL;
     }
 
@@ -308,16 +390,22 @@ static jbyteArray libenc_ARGBToI420(JNIEnv *env, jobject thiz, jintArray frame, 
     return i420Frame;
 }
 
-// For Bitmap.getPixels() ARGB_8888
+// For ImageReader frame
 static jbyteArray
-libenc_ARGBToI420Scaled(JNIEnv *env, jobject thiz, jintArray frame, jint src_width,
+libenc_YUV420_888toI420(JNIEnv *env, jobject thiz, jbyteArray y_frame, jbyteArray u_frame,
+                        jbyteArray v_frame, jint src_width,
                         jint src_height, jboolean need_flip, jint rotate_degree,
                         jint crop_x, jint crop_y, jint crop_width, jint crop_height) {
-    jint *argb_frame = env->GetIntArrayElements(frame, NULL);
 
-    if (!convert_to_i420_with_crop_scale((uint8_t *) argb_frame, src_width, src_height,
-                                         crop_x, crop_y, crop_width, crop_height,
-                                         need_flip, rotate_degree, FOURCC_ARGB)) {
+    jbyte *y_framed = env->GetByteArrayElements(y_frame, NULL);
+    jbyte *u_framed = env->GetByteArrayElements(u_frame, NULL);
+    jbyte *v_framed = env->GetByteArrayElements(v_frame, NULL);
+
+    if (!YUV420_888toI420((uint8_t *) y_framed, (uint8_t *) u_framed, (uint8_t *) v_framed,
+                          src_width,
+                          src_height,
+                          crop_x, crop_y, crop_width, crop_height,
+                          need_flip, rotate_degree)) {
         return NULL;
     }
 
@@ -325,7 +413,10 @@ libenc_ARGBToI420Scaled(JNIEnv *env, jobject thiz, jintArray frame, jint src_wid
     jbyteArray i420Frame = env->NewByteArray(y_size * 3 / 2);
     env->SetByteArrayRegion(i420Frame, 0, y_size * 3 / 2, (jbyte *) i420_scaled_frame.data);
 
-    env->ReleaseIntArrayElements(frame, argb_frame, JNI_ABORT);
+    env->ReleaseByteArrayElements(y_frame, y_framed, JNI_ABORT);
+    env->ReleaseByteArrayElements(u_frame, u_framed, JNI_ABORT);
+    env->ReleaseByteArrayElements(v_frame, v_framed, JNI_ABORT);
+
     return i420Frame;
 }
 
@@ -334,7 +425,9 @@ static jbyteArray libenc_RGBAToNV12(JNIEnv *env, jobject thiz, jbyteArray frame,
                                     jint src_height, jboolean need_flip, jint rotate_degree) {
     jbyte *rgba_frame = env->GetByteArrayElements(frame, NULL);
 
-    if (!convert_to_i420((uint8_t *) rgba_frame, src_width, src_height, need_flip, rotate_degree,
+    if (!convert_to_i420((uint8_t *) rgba_frame, src_width, src_height, 0, 0, src_width, src_height,
+                         need_flip,
+                         rotate_degree,
                          FOURCC_RGBA)) {
         return NULL;
     }
@@ -359,44 +452,15 @@ static jbyteArray libenc_RGBAToNV12(JNIEnv *env, jobject thiz, jbyteArray frame,
 }
 
 // For Bitmap.getPixels() ARGB_8888
-static jbyteArray libenc_ARGBToNV12(JNIEnv *env, jobject thiz, jintArray frame, jint src_width,
-                                    jint src_height, jboolean need_flip, jint rotate_degree) {
-    jint *argb_frame = env->GetIntArrayElements(frame, NULL);
-
-    if (!convert_to_i420((uint8_t *) argb_frame, src_width, src_height, need_flip, rotate_degree,
-                         FOURCC_ARGB)) {
-        return NULL;
-    }
-
-    int ret = ConvertFromI420(i420_scaled_frame.y, i420_scaled_frame.width,
-                              i420_scaled_frame.u, i420_scaled_frame.width / 2,
-                              i420_scaled_frame.v, i420_scaled_frame.width / 2,
-                              nv12_frame.data, nv12_frame.width,
-                              nv12_frame.width, nv12_frame.height,
-                              DST_COLOR_FMT);
-    if (ret < 0) {
-        LIBENC_LOGE("ConvertFromI420 failure");
-        return NULL;
-    }
-
-    int y_size = nv12_frame.width * nv12_frame.height;
-    jbyteArray nv12Frame = env->NewByteArray(y_size * 3 / 2);
-    env->SetByteArrayRegion(nv12Frame, 0, y_size * 3 / 2, (jbyte *) nv12_frame.data);
-
-    env->ReleaseIntArrayElements(frame, argb_frame, JNI_ABORT);
-    return nv12Frame;
-}
-
-// For Bitmap.getPixels() ARGB_8888
 static jbyteArray
-libenc_ARGBToNV12Scaled(JNIEnv *env, jobject thiz, jintArray frame, jint src_width,
-                        jint src_height, jboolean need_flip, jint rotate_degree,
-                        jint crop_x, jint crop_y, jint crop_width, jint crop_height) {
+libenc_ARGBToNV12(JNIEnv *env, jobject thiz, jintArray frame, jint src_width,
+                  jint src_height, jboolean need_flip, jint rotate_degree,
+                  jint crop_x, jint crop_y, jint crop_width, jint crop_height) {
     jint *argb_frame = env->GetIntArrayElements(frame, NULL);
 
-    if (!convert_to_i420_with_crop_scale((uint8_t *) argb_frame, src_width, src_height,
-                                         crop_x, crop_y, crop_width, crop_height,
-                                         need_flip, rotate_degree, FOURCC_ARGB)) {
+    if (!convert_to_i420((uint8_t *) argb_frame, src_width, src_height,
+                         crop_x, crop_y, crop_width, crop_height,
+                         need_flip, rotate_degree, FOURCC_ARGB)) {
         return NULL;
     }
 
@@ -474,7 +538,9 @@ static jint libenc_RGBASoftEncode(JNIEnv *env, jobject thiz, jbyteArray frame, j
                                   jlong pts) {
     jbyte *rgba_frame = env->GetByteArrayElements(frame, NULL);
 
-    if (!convert_to_i420((uint8_t *) rgba_frame, src_width, src_height, need_flip, rotate_degree,
+    if (!convert_to_i420((uint8_t *) rgba_frame, src_width, src_height, 0, 0, src_width, src_height,
+                         need_flip,
+                         rotate_degree,
                          FOURCC_RGBA)) {
         return JNI_ERR;
     }
@@ -555,12 +621,11 @@ static JNINativeMethod libenc_methods[] = {
         {"setEncoderPreset",     "(Ljava/lang/String;)V", (void *) libenc_setEncoderPreset},
         {"RGBAToI420",           "([BIIZI)[B",            (void *) libenc_RGBAToI420},
         {"RGBAToNV12",           "([BIIZI)[B",            (void *) libenc_RGBAToNV12},
-        {"ARGBToNV12Scaled",     "([IIIZIIIII)[B",        (void *) libenc_ARGBToNV12Scaled},
-        {"ARGBToI420",           "([IIIZI)[B",            (void *) libenc_ARGBToI420},
-        {"ARGBToI420Scaled",     "([IIIZIIIII)[B",        (void *) libenc_ARGBToI420Scaled},
-        {"ARGBToNV12",           "([IIIZI)[B",            (void *) libenc_ARGBToNV12},
-        {"NV21ToNV12Scaled",     "([BIIZIIIII)[B",        (void *) libenc_NV21ToNV12Scaled},
-        {"NV21ToI420Scaled",     "([BIIZIIIII)[B",        (void *) libenc_NV21ToI420Scaled},
+        {"ARGBToNV12",           "([IIIZIIIII)[B",        (void *) libenc_ARGBToNV12},
+        {"ARGBToI420",           "([IIIZIIIII)[B",        (void *) libenc_ARGBToI420},
+        {"YUV420_888toI420",     "([B[B[BIIZIIIII)[B",    (void *) libenc_YUV420_888toI420},
+        {"NV21ToNV12",           "([BIIZIIIII)[B",        (void *) libenc_NV21ToNV12},
+        {"NV21ToI420",           "([BIIZIIIII)[B",        (void *) libenc_NV21ToI420},
         {"openSoftEncoder",      "()Z",                   (void *) libenc_openSoftEncoder},
         {"closeSoftEncoder",     "()V",                   (void *) libenc_closeSoftEncoder},
         {"RGBASoftEncode",       "([BIIZIJ)I",            (void *) libenc_RGBASoftEncode},
