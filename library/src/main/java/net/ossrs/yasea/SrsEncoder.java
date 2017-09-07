@@ -1,7 +1,6 @@
 package net.ossrs.yasea;
 
 import android.content.res.Configuration;
-import android.graphics.ImageFormat;
 import android.graphics.Rect;
 import android.media.AudioFormat;
 import android.media.AudioRecord;
@@ -36,7 +35,7 @@ public class SrsEncoder {
     public static int vOutHeight = 1280;  // Since Y component is quadruple size as U and V component, the stride must be set as 32x
     public static int vBitrate = 1200 * 1024;  // 1200 kbps
     public static final int VFPS = 24;
-    public static final int VGOP = 48;
+    public static final int VGOP = 24;
     public static final int ASAMPLERATE = 44100;
     public static int aChannelConfig = AudioFormat.CHANNEL_IN_STEREO;
     public static final int ABITRATE = 128 * 1024;  // 128 kbps
@@ -75,6 +74,11 @@ public class SrsEncoder {
     private byte[] u_frame;
     private byte[] v_frame;
 
+    /**
+     * ID for last encoded channel
+     */
+    private int lastChannelID = 0;
+
     // Y, U (Cb) and V (Cr)
     // yuv420                     yuv yuv yuv yuv
     // yuv420p (planar)   yyyy*2 uu vv
@@ -99,7 +103,7 @@ public class SrsEncoder {
     }
 
     public boolean start() {
-        if (flvMuxer == null || mp4Muxer == null) {
+        if (flvMuxer == null && mp4Muxer == null) {
             return false;
         }
 
@@ -145,8 +149,8 @@ public class SrsEncoder {
             vencoder.configure(videoFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
 
             // add the video tracker to muxer.
-            videoFlvTrack = flvMuxer.addTrack(videoFormat);
-            videoMp4Track = mp4Muxer.addTrack(videoFormat);
+            if (flvMuxer != null) videoFlvTrack = flvMuxer.addTrack(videoFormat);
+            if (mp4Muxer != null) videoMp4Track = mp4Muxer.addTrack(videoFormat);
 
         } catch (IOException e) {
             Log.e(TAG, "create vencoder failed.");
@@ -169,8 +173,8 @@ public class SrsEncoder {
             aencoder.configure(audioFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
 
             // add the audio tracker to muxer.
-            audioFlvTrack = flvMuxer.addTrack(audioFormat);
-            audioMp4Track = mp4Muxer.addTrack(audioFormat);
+            if (flvMuxer != null) audioFlvTrack = flvMuxer.addTrack(audioFormat);
+            if (mp4Muxer != null) audioMp4Track = mp4Muxer.addTrack(audioFormat);
 
         } catch (IOException e) {
             Log.e(TAG, "create aencoder failed.");
@@ -325,49 +329,46 @@ public class SrsEncoder {
         }
     }
 
-    public void muxAnnexbFrames() {
-        for (; ; ) {
-            int outBufferIndex = vencoder.dequeueOutputBuffer(vebi, 0);
-            if (outBufferIndex >= 0) {
-                ByteBuffer bb = vencoder.getOutputBuffer(outBufferIndex);
-                onEncodedAnnexbFrame(bb, vebi);
-                vencoder.releaseOutputBuffer(outBufferIndex, false);
-            } else {
-                break;
-            }
-        }
-    }
-
-    public byte[] getEncodedAnnexbFrame() {
+    public byte[] getH264Frame() {
         int outBufferIndex = vencoder.dequeueOutputBuffer(vebi, 0);
         if (outBufferIndex >= 0) {
             ByteBuffer bb = vencoder.getOutputBuffer(outBufferIndex);
             byte[] frame = new byte[vebi.size];
             bb.get(frame, 0, vebi.size);
+//            frame[vebi.size] = (byte) vebi.flags;
             vencoder.releaseOutputBuffer(outBufferIndex, false);
             return frame;
         }
         return null;
     }
 
-    private void onSoftEncodedData(byte[] es, long pts, boolean isKeyFrame) {
-        ByteBuffer bb = ByteBuffer.wrap(es);
+    public void muxH264Frame(byte[] frame) {
+        ByteBuffer bb = ByteBuffer.wrap(frame, 0, frame.length);
         vebi.offset = 0;
-        vebi.size = es.length;
-        vebi.presentationTimeUs = pts;
-        vebi.flags = isKeyFrame ? MediaCodec.BUFFER_FLAG_KEY_FRAME : 0;
-        onEncodedAnnexbFrame(bb, vebi);
+        vebi.size = frame.length;
+        vebi.presentationTimeUs = System.nanoTime() / 1000 - mPresentTimeUs;
+        vebi.flags = 0;
+        mux264Frame(bb, vebi);
+    }
+
+    public void muxH264Frame() {
+        int outBufferIndex = vencoder.dequeueOutputBuffer(vebi, 0);
+        if (outBufferIndex >= 0) {
+            ByteBuffer bb = vencoder.getOutputBuffer(outBufferIndex);
+            mux264Frame(bb, vebi);
+            vencoder.releaseOutputBuffer(outBufferIndex, false);
+        }
     }
 
     // when got encoded h264 es stream.
-    private void onEncodedAnnexbFrame(ByteBuffer es, MediaCodec.BufferInfo bi) {
-//        mp4Muxer.writeSampleData(videoMp4Track, es.duplicate(), bi);
-
+    private void mux264Frame(ByteBuffer es, MediaCodec.BufferInfo bi) {
         // Check video frame cache number to judge the networking situation.
         // Just cache GOP / FPS seconds data according to latency.
         AtomicInteger videoFrameCacheNumber = flvMuxer.getVideoFrameCacheNumber();
         if (videoFrameCacheNumber != null && videoFrameCacheNumber.get() < VGOP) {
-            flvMuxer.writeSampleData(videoFlvTrack, es, bi);
+
+            if (flvMuxer != null) flvMuxer.writeSampleData(videoFlvTrack, es, bi);
+            if (mp4Muxer != null) mp4Muxer.writeSampleData(videoMp4Track, es.duplicate(), bi);
 
             if (networkWeakTriggered) {
                 networkWeakTriggered = false;
@@ -381,8 +382,8 @@ public class SrsEncoder {
 
     // when got encoded aac raw stream.
     private void onEncodedAacFrame(ByteBuffer es, MediaCodec.BufferInfo bi) {
-//        mp4Muxer.writeSampleData(audioMp4Track, es.duplicate(), bi);
-        flvMuxer.writeSampleData(audioFlvTrack, es, bi);
+        if (mp4Muxer != null) mp4Muxer.writeSampleData(audioMp4Track, es.duplicate(), bi);
+        if (flvMuxer != null) flvMuxer.writeSampleData(audioFlvTrack, es, bi);
     }
 
     public void onGetPcmFrame(byte[] data, int size) {
@@ -414,7 +415,7 @@ public class SrsEncoder {
         encodeYuvFrame(NV21toYUV(data, width, height, boundingBox));
     }
 
-    public void onGetImageFrame(Image image, Rect boundingBox) {
+    public void onGetYUV420_888Frame(Image image, Rect boundingBox) {
         encodeYuvFrame(YUV420_888toYUV(image, boundingBox));
     }
 
@@ -425,12 +426,6 @@ public class SrsEncoder {
     public void encodeYuvFrame(byte[] frame) {
         long pts = System.nanoTime() / 1000 - mPresentTimeUs;
         encodeYuvFrame(frame, pts);
-    }
-
-    public void onGetH264Frame(byte[] frame) {
-        if (frame != null) {
-            onSoftEncodedData(frame, System.nanoTime() / 1000 - mPresentTimeUs, false);
-        }
     }
 
     public byte[] RGBAtoYUV(byte[] data, int width, int height) {

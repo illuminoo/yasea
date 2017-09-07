@@ -118,16 +118,20 @@ public class SrsFlvMuxer {
         }
 
         if (frame.isVideo()) {
-//            if (frame.isKeyFrame()) {
-//                Log.i(TAG, String.format("worker: send frame type=%d, dts=%d, size=%dB",
-//                        frame.type, frame.dts, frame.flvTag.array().length));
-//            }
+            if (frame.isKeyFrame()) {
+                Log.i(TAG, String.format("worker: send frame type=%d, dts=%d, size=%dB",
+                        frame.type, frame.dts, frame.flvTag.array().length));
+            }
             publisher.publishVideoData(frame.flvTag.array(), frame.flvTag.size(), frame.dts);
             mVideoAllocator.release(frame.flvTag);
         } else if (frame.isAudio()) {
             publisher.publishAudioData(frame.flvTag.array(), frame.flvTag.size(), frame.dts);
             mAudioAllocator.release(frame.flvTag);
         }
+    }
+
+    public void setNeedToFindKeyFrame() {
+        needToFindKeyFrame = true;
     }
 
     /**
@@ -205,11 +209,11 @@ public class SrsFlvMuxer {
      * @param bufferInfo The buffer information related to this sample.
      */
     public void writeSampleData(int trackIndex, ByteBuffer byteBuf, MediaCodec.BufferInfo bufferInfo) {
-        if (bufferInfo.offset > 0) {
-            Log.w(TAG, String.format("encoded frame %dB, offset=%d pts=%dms",
-                    bufferInfo.size, bufferInfo.offset, bufferInfo.presentationTimeUs / 1000
-            ));
-        }
+//        if (bufferInfo.offset > 0) {
+//            Log.w(TAG, String.format("encoded frame %dB, offset=%d pts=%dms",
+//                    bufferInfo.size, bufferInfo.offset, bufferInfo.presentationTimeUs / 1000
+//            ));
+//        }
 
         if (VIDEO_TRACK == trackIndex) {
             flv.writeVideoSample(byteBuf, bufferInfo);
