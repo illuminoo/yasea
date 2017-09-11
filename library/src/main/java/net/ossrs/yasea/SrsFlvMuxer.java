@@ -32,7 +32,7 @@ public class SrsFlvMuxer {
     private final Object txFrameLock = new Object();
 
     private SrsFlv flv = new SrsFlv();
-    private boolean needToFindKeyFrame = true;
+    public boolean needToFindKeyFrame = true;
     private SrsFlvFrame mVideoSequenceHeader;
     private SrsFlvFrame mAudioSequenceHeader;
     private SrsAllocator mVideoAllocator = new SrsAllocator(VIDEO_ALLOC_SIZE);
@@ -128,10 +128,6 @@ public class SrsFlvMuxer {
             publisher.publishAudioData(frame.flvTag.array(), frame.flvTag.size(), frame.dts);
             mAudioAllocator.release(frame.flvTag);
         }
-    }
-
-    public void setNeedToFindKeyFrame() {
-        needToFindKeyFrame = true;
     }
 
     /**
