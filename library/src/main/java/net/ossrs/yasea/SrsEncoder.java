@@ -346,7 +346,7 @@ public class SrsEncoder {
         ByteBuffer bb = ByteBuffer.wrap(frame, 0, frame.length);
         vebi.offset = 0;
         vebi.size = frame.length;
-        vebi.presentationTimeUs = System.nanoTime() / 1000 - mPresentTimeUs;
+        vebi.presentationTimeUs = System.nanoTime() / 1000 - mPresentTimeUs; // TODO fix timestamps!
         vebi.flags = 0;
         mux264Frame(bb, vebi);
     }
