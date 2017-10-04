@@ -335,7 +335,6 @@ public class SrsEncoder {
             ByteBuffer bb = vencoder.getOutputBuffer(outBufferIndex);
             byte[] frame = new byte[vebi.size];
             bb.get(frame, 0, vebi.size);
-//            frame[vebi.size] = (byte) vebi.flags;
             vencoder.releaseOutputBuffer(outBufferIndex, false);
             return frame;
         }
@@ -346,7 +345,7 @@ public class SrsEncoder {
         ByteBuffer bb = ByteBuffer.wrap(frame, 0, frame.length);
         vebi.offset = 0;
         vebi.size = frame.length;
-        vebi.presentationTimeUs = System.nanoTime() / 1000 - mPresentTimeUs; // TODO fix timestamps!
+        vebi.presentationTimeUs = System.nanoTime() / 1000 - mPresentTimeUs;
         vebi.flags = 0;
         mux264Frame(bb, vebi);
     }
@@ -355,6 +354,7 @@ public class SrsEncoder {
         int outBufferIndex = vencoder.dequeueOutputBuffer(vebi, 0);
         if (outBufferIndex >= 0) {
             ByteBuffer bb = vencoder.getOutputBuffer(outBufferIndex);
+            vebi.presentationTimeUs = System.nanoTime() / 1000 - mPresentTimeUs;
             mux264Frame(bb, vebi);
             vencoder.releaseOutputBuffer(outBufferIndex, false);
         }
