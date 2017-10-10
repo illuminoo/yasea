@@ -32,7 +32,7 @@ public class SrsFlvMuxer {
     private final Object txFrameLock = new Object();
 
     private SrsFlv flv = new SrsFlv();
-    private boolean needToFindKeyFrame = true;
+    public boolean needToFindKeyFrame = true;
     private SrsFlvFrame mVideoSequenceHeader;
     private SrsFlvFrame mAudioSequenceHeader;
     private SrsAllocator mVideoAllocator = new SrsAllocator(VIDEO_ALLOC_SIZE);
@@ -42,7 +42,6 @@ public class SrsFlvMuxer {
     private static final int VIDEO_TRACK = 100;
     private static final int AUDIO_TRACK = 101;
     private static final String TAG = "SrsFlvMuxer";
-    private volatile boolean syncKeyFrame = false;
 
     /**
      * constructor.
@@ -119,10 +118,10 @@ public class SrsFlvMuxer {
         }
 
         if (frame.isVideo()) {
-//            if (frame.isKeyFrame()) {
-//                Log.i(TAG, String.format("worker: send frame type=%d, dts=%d, size=%dB",
-//                        frame.type, frame.dts, frame.flvTag.array().length));
-//            }
+            if (frame.isKeyFrame()) {
+                Log.i(TAG, String.format("worker: send frame type=%d, dts=%d, size=%dB",
+                        frame.type, frame.dts, frame.flvTag.array().length));
+            }
             publisher.publishVideoData(frame.flvTag.array(), frame.flvTag.size(), frame.dts);
             mVideoAllocator.release(frame.flvTag);
         } else if (frame.isAudio()) {
@@ -206,11 +205,11 @@ public class SrsFlvMuxer {
      * @param bufferInfo The buffer information related to this sample.
      */
     public void writeSampleData(int trackIndex, ByteBuffer byteBuf, MediaCodec.BufferInfo bufferInfo) {
-        if (bufferInfo.offset > 0) {
-            Log.w(TAG, String.format("encoded frame %dB, offset=%d pts=%dms",
-                    bufferInfo.size, bufferInfo.offset, bufferInfo.presentationTimeUs / 1000
-            ));
-        }
+//        if (bufferInfo.offset > 0) {
+//            Log.w(TAG, String.format("encoded frame %dB, offset=%d pts=%dms",
+//                    bufferInfo.size, bufferInfo.offset, bufferInfo.presentationTimeUs / 1000
+//            ));
+//        }
 
         if (VIDEO_TRACK == trackIndex) {
             flv.writeVideoSample(byteBuf, bufferInfo);
