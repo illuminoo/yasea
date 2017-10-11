@@ -79,6 +79,8 @@ public class SrsEncoder {
      */
     private int lastChannelID = 0;
 
+    private long lastPTS = -1;
+
     // Y, U (Cb) and V (Cr)
     // yuv420                     yuv yuv yuv yuv
     // yuv420p (planar)   yyyy*2 uu vv
@@ -108,7 +110,7 @@ public class SrsEncoder {
         }
 
         // the referent PTS for video and audio encoder.
-        mPresentTimeUs = System.nanoTime() / 1000;
+        mPresentTimeUs = System.currentTimeMillis() * 1000;
 
         setEncoderResolution(vOutWidth, vOutHeight);
         setEncoderFps(VFPS);
@@ -333,8 +335,16 @@ public class SrsEncoder {
         int outBufferIndex = vencoder.dequeueOutputBuffer(vebi, 0);
         if (outBufferIndex >= 0) {
             ByteBuffer bb = vencoder.getOutputBuffer(outBufferIndex);
-            byte[] frame = new byte[vebi.size];
+            byte[] frame = new byte[vebi.size + 8];
             bb.get(frame, 0, vebi.size);
+
+            // Encode timestamp
+            long time = vebi.presentationTimeUs + mPresentTimeUs;
+            for (int i = 7; i >= 0; i--) {
+                frame[vebi.size+i] = (byte)(time & 0xFF);
+                time >>= 8;
+            }
+
             vencoder.releaseOutputBuffer(outBufferIndex, false);
             return frame;
         }
@@ -342,10 +352,18 @@ public class SrsEncoder {
     }
 
     public void muxH264Frame(byte[] frame) {
-        ByteBuffer bb = ByteBuffer.wrap(frame, 0, frame.length);
+        ByteBuffer bb = ByteBuffer.wrap(frame, 0, frame.length-8);
         vebi.offset = 0;
-        vebi.size = frame.length;
-        vebi.presentationTimeUs = System.nanoTime() / 1000 - mPresentTimeUs;
+        vebi.size = frame.length-8;
+
+        // Decode timestamp
+        long time = 0;
+        for (int i = 0; i < 8; i++) {
+            time <<= 8;
+            time |= (frame[vebi.size+i] & 0xFF);
+        }
+        vebi.presentationTimeUs = time - mPresentTimeUs;
+
         vebi.flags = 0;
         mux264Frame(bb, vebi);
     }
@@ -354,9 +372,11 @@ public class SrsEncoder {
         int outBufferIndex = vencoder.dequeueOutputBuffer(vebi, 0);
         if (outBufferIndex >= 0) {
             ByteBuffer bb = vencoder.getOutputBuffer(outBufferIndex);
-            vebi.presentationTimeUs = System.nanoTime() / 1000 - mPresentTimeUs;
+//            vebi.presentationTimeUs = System.nanoTime() / 1000 - mPresentTimeUs;
             mux264Frame(bb, vebi);
             vencoder.releaseOutputBuffer(outBufferIndex, false);
+
+            muxH264Frame();
         }
     }
 
@@ -367,8 +387,12 @@ public class SrsEncoder {
         AtomicInteger videoFrameCacheNumber = flvMuxer.getVideoFrameCacheNumber();
         if (videoFrameCacheNumber != null && videoFrameCacheNumber.get() < VGOP) {
 
-            if (flvMuxer != null) flvMuxer.writeSampleData(videoFlvTrack, es, bi);
-            if (mp4Muxer != null) mp4Muxer.writeSampleData(videoMp4Track, es.duplicate(), bi);
+            if (bi.presentationTimeUs > lastPTS) {
+                if (flvMuxer != null) flvMuxer.writeSampleData(videoFlvTrack, es, bi);
+                if (mp4Muxer != null) mp4Muxer.writeSampleData(videoMp4Track, es.duplicate(), bi);
+
+                lastPTS = bi.presentationTimeUs;
+            }
 
             if (networkWeakTriggered) {
                 networkWeakTriggered = false;
@@ -391,7 +415,7 @@ public class SrsEncoder {
         if (inBufferIndex >= 0) {
             ByteBuffer bb = aencoder.getInputBuffer(inBufferIndex);
             bb.put(data, 0, size);
-            long pts = System.nanoTime() / 1000 - mPresentTimeUs;
+            long pts = System.currentTimeMillis() * 1000 - mPresentTimeUs;
             aencoder.queueInputBuffer(inBufferIndex, 0, size, pts, 0);
         }
 
@@ -424,7 +448,7 @@ public class SrsEncoder {
     }
 
     public void encodeYuvFrame(byte[] frame) {
-        long pts = System.nanoTime() / 1000 - mPresentTimeUs;
+        long pts = System.currentTimeMillis() * 1000 - mPresentTimeUs;
         encodeYuvFrame(frame, pts);
     }
 
