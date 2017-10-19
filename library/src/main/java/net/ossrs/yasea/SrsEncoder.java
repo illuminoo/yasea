@@ -372,7 +372,6 @@ public class SrsEncoder {
         int outBufferIndex = vencoder.dequeueOutputBuffer(vebi, 0);
         if (outBufferIndex >= 0) {
             ByteBuffer bb = vencoder.getOutputBuffer(outBufferIndex);
-//            vebi.presentationTimeUs = System.nanoTime() / 1000 - mPresentTimeUs;
             mux264Frame(bb, vebi);
             vencoder.releaseOutputBuffer(outBufferIndex, false);
 
