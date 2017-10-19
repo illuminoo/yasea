@@ -1,6 +1,7 @@
 package net.ossrs.yasea;
 
 import android.content.res.Configuration;
+import android.graphics.Bitmap;
 import android.graphics.Rect;
 import android.media.AudioFormat;
 import android.media.AudioRecord;
@@ -73,6 +74,7 @@ public class SrsEncoder {
     private byte[] y_frame;
     private byte[] u_frame;
     private byte[] v_frame;
+    private int[] argb_frame;
 
     /**
      * ID for last encoded channel
@@ -255,6 +257,8 @@ public class SrsEncoder {
         vPortraitHeight = height;
         vLandscapeWidth = height;
         vLandscapeHeight = width;
+
+        argb_frame = new int[width*height];
     }
 
     public void setInputResolution(int width, int height) {
@@ -273,6 +277,8 @@ public class SrsEncoder {
         vLandscapeHeight = height;
         vPortraitWidth = height;
         vPortraitHeight = width;
+
+        argb_frame = new int[width*height];
     }
 
     public void setVideoHDMode() {
@@ -482,6 +488,11 @@ public class SrsEncoder {
                 cropArea.left, cropArea.top, cropArea.width(), cropArea.height());
     }
 
+    public void setOverlay(Bitmap overlay) {
+        overlay.getPixels(argb_frame, 0, vOutWidth, 0, 0, vOutWidth, vOutHeight);
+        ARGBToOverlay(argb_frame, vOutWidth, vOutHeight, false, 0);
+    }
+
     public byte[] ARGBtoYUV(int[] data, int width, int height, Rect boundingBox) {
         switch (mVideoColorFormat) {
             case MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Planar:
@@ -536,6 +547,8 @@ public class SrsEncoder {
     private native byte[] RGBAToNV12(byte[] frame, int width, int height, boolean flip, int rotate);
 
     private native byte[] ARGBToI420(int[] frame, int width, int height, boolean flip, int rotate, int crop_x, int crop_y, int crop_width, int crop_height);
+
+    private native void ARGBToOverlay(int[] frame, int width, int height, boolean flip, int rotate);
 
     private native byte[] YUV420_888toI420(byte[] y_frame, byte[] u_frame, byte[] v_frame, int width, int height, boolean flip, int rotate, int crop_x, int crop_y, int crop_width, int crop_height);
 
