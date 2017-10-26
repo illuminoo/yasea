@@ -55,7 +55,6 @@ static const int DST_COLOR_FMT = FOURCC_NV12;
 static struct YuvFrame i420_rotated_frame;
 static struct YuvFrame i420_scaled_frame;
 static struct YuvFrame i420_overlay_frame;
-static struct YuvFrame i420_out_frame;
 static struct YuvFrame nv12_frame;
 static struct YuvFrame i420_src_frame;
 
@@ -300,16 +299,6 @@ libenc_setEncoderResolution(JNIEnv *env, jobject thiz, jint out_width, jint out_
         i420_overlay_frame.alpha = (uint8_t *) malloc(y_size);
     }
 
-    if (i420_out_frame.width != out_width || i420_out_frame.height != out_height) {
-        free(i420_out_frame.data);
-        i420_out_frame.width = out_width;
-        i420_out_frame.height = out_height;
-        i420_out_frame.data = (uint8_t *) malloc(y_size * 3 / 2);
-        i420_out_frame.y = i420_out_frame.data;
-        i420_out_frame.u = i420_out_frame.y + y_size;
-        i420_out_frame.v = i420_out_frame.u + y_size / 4;
-    }
-
     if (nv12_frame.width != out_width || nv12_frame.height != out_height) {
         free(nv12_frame.data);
         nv12_frame.width = out_width;
@@ -443,11 +432,11 @@ libenc_YUV420_888toI420(JNIEnv *env, jobject thiz, jbyteArray y_frame, jbyteArra
                             i420_scaled_frame.u, i420_scaled_frame.width / 2,
                             i420_scaled_frame.v, i420_scaled_frame.width / 2,
                             i420_overlay_frame.alpha, i420_overlay_frame.width,
-                            i420_out_frame.y, i420_out_frame.width,
-                            i420_out_frame.u, i420_out_frame.width / 2,
-                            i420_out_frame.v, i420_out_frame.width / 2,
-                            i420_out_frame.width,
-                            i420_out_frame.height
+                            i420_scaled_frame.y, i420_scaled_frame.width,
+                            i420_scaled_frame.u, i420_scaled_frame.width / 2,
+                            i420_scaled_frame.v, i420_scaled_frame.width / 2,
+                            i420_scaled_frame.width,
+                            i420_scaled_frame.height
         );
 
         if (ret < 0) {
@@ -456,9 +445,9 @@ libenc_YUV420_888toI420(JNIEnv *env, jobject thiz, jbyteArray y_frame, jbyteArra
         }
     }
 
-    int y_size = i420_out_frame.width * i420_out_frame.height;
+    int y_size = i420_scaled_frame.width * i420_scaled_frame.height;
     jbyteArray i420Frame = env->NewByteArray(y_size * 3 / 2);
-    env->SetByteArrayRegion(i420Frame, 0, y_size * 3 / 2, (jbyte *) i420_out_frame.data);
+    env->SetByteArrayRegion(i420Frame, 0, y_size * 3 / 2, (jbyte *) i420_scaled_frame.data);
 
     env->ReleaseByteArrayElements(y_frame, y_framed, JNI_ABORT);
     env->ReleaseByteArrayElements(u_frame, u_framed, JNI_ABORT);

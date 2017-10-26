@@ -113,6 +113,7 @@ public class SrsEncoder {
 
         // the referent PTS for video and audio encoder.
         mPresentTimeUs = System.currentTimeMillis() * 1000;
+        lastPTS = 0;
 
         setEncoderResolution(vOutWidth, vOutHeight);
         setEncoderFps(VFPS);
@@ -170,7 +171,7 @@ public class SrsEncoder {
             int ach = aChannelConfig == AudioFormat.CHANNEL_IN_STEREO ? 2 : 1;
             MediaFormat audioFormat = MediaFormat.createAudioFormat(ACODEC, ASAMPLERATE, ach);
             audioFormat.setInteger(MediaFormat.KEY_BIT_RATE, ABITRATE);
-            audioFormat.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 0);
+            audioFormat.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, getPcmBufferSize());
 
             String AudioCodecName = list.findEncoderForFormat(audioFormat);
             aencoder = MediaCodec.createByCodecName(AudioCodecName);
@@ -257,8 +258,6 @@ public class SrsEncoder {
         vPortraitHeight = height;
         vLandscapeWidth = height;
         vLandscapeHeight = width;
-
-        argb_frame = new int[width*height];
     }
 
     public void setInputResolution(int width, int height) {
@@ -277,8 +276,6 @@ public class SrsEncoder {
         vLandscapeHeight = height;
         vPortraitWidth = height;
         vPortraitHeight = width;
-
-        argb_frame = new int[width*height];
     }
 
     public void setVideoHDMode() {
@@ -374,25 +371,30 @@ public class SrsEncoder {
         mux264Frame(bb, vebi);
     }
 
-    public void muxH264Frame() {
-        int outBufferIndex = vencoder.dequeueOutputBuffer(vebi, 0);
-        if (outBufferIndex >= 0) {
-            ByteBuffer bb = vencoder.getOutputBuffer(outBufferIndex);
-            mux264Frame(bb, vebi);
-            vencoder.releaseOutputBuffer(outBufferIndex, false);
-
-            muxH264Frame();
-        }
+    public void muxH264Frames() {
+        int outBufferIndex = -1;
+        do {
+            outBufferIndex = vencoder.dequeueOutputBuffer(vebi, 0);
+            if (outBufferIndex >= 0) {
+                ByteBuffer bb = vencoder.getOutputBuffer(outBufferIndex);
+                mux264Frame(bb, vebi);
+                vencoder.releaseOutputBuffer(outBufferIndex, false);
+            }
+        } while (outBufferIndex>=0);
     }
 
-    // when got encoded h264 es stream.
+    /**
+     * Mux encoded H264 frame
+     * @param es Buffer
+     * @param bi Buffer info
+     */
     private void mux264Frame(ByteBuffer es, MediaCodec.BufferInfo bi) {
         // Check video frame cache number to judge the networking situation.
         // Just cache GOP / FPS seconds data according to latency.
         AtomicInteger videoFrameCacheNumber = flvMuxer.getVideoFrameCacheNumber();
         if (videoFrameCacheNumber != null && videoFrameCacheNumber.get() < VGOP) {
 
-            if (bi.presentationTimeUs > lastPTS) {
+            if (bi.presentationTimeUs >= lastPTS) {
                 if (flvMuxer != null) flvMuxer.writeSampleData(videoFlvTrack, es, bi);
                 if (mp4Muxer != null) mp4Muxer.writeSampleData(videoMp4Track, es.duplicate(), bi);
 
@@ -409,12 +411,6 @@ public class SrsEncoder {
         }
     }
 
-    // when got encoded aac raw stream.
-    private void onEncodedAacFrame(ByteBuffer es, MediaCodec.BufferInfo bi) {
-        if (mp4Muxer != null) mp4Muxer.writeSampleData(audioMp4Track, es.duplicate(), bi);
-        if (flvMuxer != null) flvMuxer.writeSampleData(audioFlvTrack, es, bi);
-    }
-
     public void onGetPcmFrame(byte[] data, int size) {
         int inBufferIndex = aencoder.dequeueInputBuffer(-1);
         if (inBufferIndex >= 0) {
@@ -423,17 +419,28 @@ public class SrsEncoder {
             long pts = System.currentTimeMillis() * 1000 - mPresentTimeUs;
             aencoder.queueInputBuffer(inBufferIndex, 0, size, pts, 0);
         }
+    }
 
-        for (; ; ) {
-            int outBufferIndex = aencoder.dequeueOutputBuffer(aebi, 0);
+    public void muxPCMFrames() {
+        int outBufferIndex = -1;
+        do {
+            outBufferIndex = aencoder.dequeueOutputBuffer(aebi, 0);
             if (outBufferIndex >= 0) {
                 ByteBuffer bb = aencoder.getOutputBuffer(outBufferIndex);
-                onEncodedAacFrame(bb, aebi);
+                muxAACFrame(bb, aebi);
                 aencoder.releaseOutputBuffer(outBufferIndex, false);
-            } else {
-                break;
             }
-        }
+        } while (outBufferIndex>=0);
+    }
+
+    /**
+     * Mux encoded AAC frame
+     * @param es Buffer
+     * @param bi Buffer info
+     */
+    private void muxAACFrame(ByteBuffer es, MediaCodec.BufferInfo bi) {
+        if (flvMuxer != null) flvMuxer.writeSampleData(audioFlvTrack, es, bi);
+        if (mp4Muxer != null) mp4Muxer.writeSampleData(audioMp4Track, es.duplicate(), bi);
     }
 
     public void onGetRgbaFrame(byte[] data, int width, int height) {
@@ -489,6 +496,10 @@ public class SrsEncoder {
     }
 
     public void setOverlay(Bitmap overlay) {
+        if (overlay==null) return;
+        if (argb_frame==null) {
+            argb_frame = new int[vOutWidth*vOutHeight];
+        }
         overlay.getPixels(argb_frame, 0, vOutWidth, 0, 0, vOutWidth, vOutHeight);
         ARGBToOverlay(argb_frame, vOutWidth, vOutHeight, false, 0);
     }
@@ -527,9 +538,8 @@ public class SrsEncoder {
     }
 
     public int getPcmBufferSize() {
-        int pcmBufSize = AudioRecord.getMinBufferSize(ASAMPLERATE, AudioFormat.CHANNEL_IN_STEREO,
-                AudioFormat.ENCODING_PCM_16BIT) + 8191;
-        return pcmBufSize - (pcmBufSize % 8192);
+        return AudioRecord.getMinBufferSize(ASAMPLERATE, AudioFormat.CHANNEL_IN_STEREO,
+                AudioFormat.ENCODING_PCM_16BIT);
     }
 
     private native void setEncoderResolution(int outWidth, int outHeight);
