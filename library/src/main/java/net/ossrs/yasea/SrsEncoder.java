@@ -282,12 +282,12 @@ public class SrsEncoder {
 
     public void setVideoHDMode() {
         vBitrate = 3600 * 1024;  // 3600 kbps
-        x264Preset = "fast";
+        x264Preset = "veryfast";
     }
 
     public void setVideoSmoothMode() {
         vBitrate = 1200 * 1024;  // 1200 kbps
-        x264Preset = "veryfast";
+        x264Preset = "superfast";
     }
 
     public int getPreviewWidth() {
