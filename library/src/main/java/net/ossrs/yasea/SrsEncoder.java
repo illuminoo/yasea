@@ -1,6 +1,5 @@
 package net.ossrs.yasea;
 
-import android.annotation.SuppressLint;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.Rect;
@@ -36,8 +35,8 @@ public class SrsEncoder {
     public static int vOutWidth = 720;   // Note: the stride of resolution must be set as 16x for hard encoding with some chip like MTK
     public static int vOutHeight = 1280;  // Since Y component is quadruple size as U and V component, the stride must be set as 32x
     public static int vBitrate = 1200 * 1024;  // 1200 kbps
-    public static final int VFPS = 24;
-    public static final int VGOP = 24;
+    public static final int VFPS = 30;
+    public static final int VGOP = 30;
     public static final int ASAMPLERATE = 44100;
     public static int aChannelConfig = AudioFormat.CHANNEL_IN_STEREO;
     public static final int ABITRATE = 192 * 1024;  // 128 kbps
@@ -283,12 +282,12 @@ public class SrsEncoder {
 
     public void setVideoHDMode() {
         vBitrate = 3600 * 1024;  // 3600 kbps
-        x264Preset = "veryfast";
+        x264Preset = "fast";
     }
 
     public void setVideoSmoothMode() {
         vBitrate = 1200 * 1024;  // 1200 kbps
-        x264Preset = "superfast";
+        x264Preset = "veryfast";
     }
 
     public int getPreviewWidth() {
@@ -374,14 +373,15 @@ public class SrsEncoder {
         mux264Frame(bb, vebi);
     }
 
-    public void muxH264Frames() {
+    public boolean muxH264Frame() {
         int outBufferIndex = vencoder.dequeueOutputBuffer(vebi, 0);
-        while (outBufferIndex >= 0) {
+        if (outBufferIndex >= 0) {
             ByteBuffer bb = vencoder.getOutputBuffer(outBufferIndex);
             mux264Frame(bb, vebi);
             vencoder.releaseOutputBuffer(outBufferIndex, false);
-            outBufferIndex = vencoder.dequeueOutputBuffer(vebi, 0);
+            return true;
         }
+        return false;
     }
 
     /**
