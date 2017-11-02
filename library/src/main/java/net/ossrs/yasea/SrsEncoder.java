@@ -1,5 +1,6 @@
 package net.ossrs.yasea;
 
+import android.annotation.SuppressLint;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.Rect;
@@ -39,7 +40,7 @@ public class SrsEncoder {
     public static final int VGOP = 24;
     public static final int ASAMPLERATE = 44100;
     public static int aChannelConfig = AudioFormat.CHANNEL_IN_STEREO;
-    public static final int ABITRATE = 128 * 1024;  // 128 kbps
+    public static final int ABITRATE = 192 * 1024;  // 128 kbps
 
     private SrsEncodeHandler mHandler;
 
@@ -82,6 +83,7 @@ public class SrsEncoder {
     private int lastChannelID = 0;
 
     private long lastPTS = -1;
+    private long syncPTS = -1;
 
     // Y, U (Cb) and V (Cr)
     // yuv420                     yuv yuv yuv yuv
@@ -114,6 +116,7 @@ public class SrsEncoder {
         // the referent PTS for video and audio encoder.
         mPresentTimeUs = System.currentTimeMillis() * 1000;
         lastPTS = 0;
+        syncPTS = 0;
 
         setEncoderResolution(vOutWidth, vOutHeight);
         setEncoderFps(VFPS);
@@ -144,7 +147,7 @@ public class SrsEncoder {
             // Note: landscape to portrait, 90 degree rotation, so we need to switch width and height in configuration
             MediaFormat videoFormat = MediaFormat.createVideoFormat(VCODEC, vOutWidth, vOutHeight);
             videoFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT, mVideoColorFormat);
-            videoFormat.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 0);
+//            videoFormat.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 0);
             videoFormat.setInteger(MediaFormat.KEY_BIT_RATE, vBitrate);
             videoFormat.setInteger(MediaFormat.KEY_FRAME_RATE, VFPS);
             videoFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, VGOP / VFPS);
@@ -279,12 +282,12 @@ public class SrsEncoder {
     }
 
     public void setVideoHDMode() {
-        vBitrate = 1200 * 1024;  // 1200 kbps
+        vBitrate = 3600 * 1024;  // 3600 kbps
         x264Preset = "veryfast";
     }
 
     public void setVideoSmoothMode() {
-        vBitrate = 500 * 1024;  // 500 kbps
+        vBitrate = 1200 * 1024;  // 1200 kbps
         x264Preset = "superfast";
     }
 
@@ -344,7 +347,7 @@ public class SrsEncoder {
             // Encode timestamp
             long time = vebi.presentationTimeUs + mPresentTimeUs;
             for (int i = 7; i >= 0; i--) {
-                frame[vebi.size+i] = (byte)(time & 0xFF);
+                frame[vebi.size + i] = (byte) (time & 0xFF);
                 time >>= 8;
             }
 
@@ -355,15 +358,15 @@ public class SrsEncoder {
     }
 
     public void muxH264Frame(byte[] frame) {
-        ByteBuffer bb = ByteBuffer.wrap(frame, 0, frame.length-8);
+        ByteBuffer bb = ByteBuffer.wrap(frame, 0, frame.length - 8);
         vebi.offset = 0;
-        vebi.size = frame.length-8;
+        vebi.size = frame.length - 8;
 
         // Decode timestamp
         long time = 0;
         for (int i = 0; i < 8; i++) {
             time <<= 8;
-            time |= (frame[vebi.size+i] & 0xFF);
+            time |= (frame[vebi.size + i] & 0xFF);
         }
         vebi.presentationTimeUs = time - mPresentTimeUs;
 
@@ -372,19 +375,18 @@ public class SrsEncoder {
     }
 
     public void muxH264Frames() {
-        int outBufferIndex = -1;
-        do {
+        int outBufferIndex = vencoder.dequeueOutputBuffer(vebi, 0);
+        while (outBufferIndex >= 0) {
+            ByteBuffer bb = vencoder.getOutputBuffer(outBufferIndex);
+            mux264Frame(bb, vebi);
+            vencoder.releaseOutputBuffer(outBufferIndex, false);
             outBufferIndex = vencoder.dequeueOutputBuffer(vebi, 0);
-            if (outBufferIndex >= 0) {
-                ByteBuffer bb = vencoder.getOutputBuffer(outBufferIndex);
-                mux264Frame(bb, vebi);
-                vencoder.releaseOutputBuffer(outBufferIndex, false);
-            }
-        } while (outBufferIndex>=0);
+        }
     }
 
     /**
      * Mux encoded H264 frame
+     *
      * @param es Buffer
      * @param bi Buffer info
      */
@@ -393,6 +395,12 @@ public class SrsEncoder {
         // Just cache GOP / FPS seconds data according to latency.
         AtomicInteger videoFrameCacheNumber = flvMuxer.getVideoFrameCacheNumber();
         if (videoFrameCacheNumber != null && videoFrameCacheNumber.get() < VGOP) {
+
+//            if (flvMuxer.needToFindKeyFrame) {
+//                bi.presentationTimeUs = 1000000/VFPS;
+//            }
+//
+//            bi.presentationTimeUs -= syncPTS;
 
             if (bi.presentationTimeUs >= lastPTS) {
                 if (flvMuxer != null) flvMuxer.writeSampleData(videoFlvTrack, es, bi);
@@ -422,19 +430,19 @@ public class SrsEncoder {
     }
 
     public void muxPCMFrames() {
-        int outBufferIndex = -1;
-        do {
+        int outBufferIndex = aencoder.dequeueOutputBuffer(aebi, 0);
+        while (outBufferIndex >= 0) {
+            ByteBuffer bb = aencoder.getOutputBuffer(outBufferIndex);
+            muxAACFrame(bb, aebi);
+            aencoder.releaseOutputBuffer(outBufferIndex, false);
+
             outBufferIndex = aencoder.dequeueOutputBuffer(aebi, 0);
-            if (outBufferIndex >= 0) {
-                ByteBuffer bb = aencoder.getOutputBuffer(outBufferIndex);
-                muxAACFrame(bb, aebi);
-                aencoder.releaseOutputBuffer(outBufferIndex, false);
-            }
-        } while (outBufferIndex>=0);
+        }
     }
 
     /**
      * Mux encoded AAC frame
+     *
      * @param es Buffer
      * @param bi Buffer info
      */
@@ -496,9 +504,9 @@ public class SrsEncoder {
     }
 
     public void setOverlay(Bitmap overlay) {
-        if (overlay==null) return;
-        if (argb_frame==null) {
-            argb_frame = new int[vOutWidth*vOutHeight];
+        if (overlay == null) return;
+        if (argb_frame == null) {
+            argb_frame = new int[vOutWidth * vOutHeight];
         }
         overlay.getPixels(argb_frame, 0, vOutWidth, 0, 0, vOutWidth, vOutHeight);
         ARGBToOverlay(argb_frame, vOutWidth, vOutHeight, false, 0);
