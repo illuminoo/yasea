@@ -39,7 +39,7 @@ public class SrsEncoder {
     public static final int VGOP = 30;
     public static final int ASAMPLERATE = 44100;
     public static int aChannelConfig = AudioFormat.CHANNEL_IN_STEREO;
-    public static final int ABITRATE = 192 * 1024;  // 128 kbps
+    public static final int ABITRATE = 192 * 1024;  // 192 kbps
 
     private SrsEncodeHandler mHandler;
 
@@ -149,6 +149,7 @@ public class SrsEncoder {
 //            videoFormat.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 0);
             videoFormat.setInteger(MediaFormat.KEY_BIT_RATE, vBitrate);
             videoFormat.setInteger(MediaFormat.KEY_FRAME_RATE, VFPS);
+            videoFormat.setInteger(MediaFormat.KEY_INTRA_REFRESH_PERIOD, VFPS);
             videoFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, VGOP / VFPS);
 
             String videoCodecName = list.findEncoderForFormat(videoFormat);
@@ -371,6 +372,12 @@ public class SrsEncoder {
 
         vebi.flags = 0;
         mux264Frame(bb, vebi);
+
+        // Release codec output buffers
+        int outBufferIndex = vencoder.dequeueOutputBuffer(vebi, 0);
+        if (outBufferIndex >= 0) {
+            vencoder.releaseOutputBuffer(outBufferIndex, false);
+        }
     }
 
     public boolean muxH264Frame() {
@@ -396,17 +403,12 @@ public class SrsEncoder {
         AtomicInteger videoFrameCacheNumber = flvMuxer.getVideoFrameCacheNumber();
         if (videoFrameCacheNumber != null && videoFrameCacheNumber.get() < VGOP) {
 
-//            if (flvMuxer.needToFindKeyFrame) {
-//                bi.presentationTimeUs = 1000000/VFPS;
-//            }
-//
-//            bi.presentationTimeUs -= syncPTS;
-
             if (bi.presentationTimeUs >= lastPTS) {
+
                 if (flvMuxer != null) flvMuxer.writeSampleData(videoFlvTrack, es, bi);
                 if (mp4Muxer != null) mp4Muxer.writeSampleData(videoMp4Track, es.duplicate(), bi);
 
-                lastPTS = bi.presentationTimeUs;
+                if (!flvMuxer.needToFindKeyFrame) lastPTS = bi.presentationTimeUs;
             }
 
             if (networkWeakTriggered) {
