@@ -149,7 +149,6 @@ public class SrsEncoder {
 //            videoFormat.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 0);
             videoFormat.setInteger(MediaFormat.KEY_BIT_RATE, vBitrate);
             videoFormat.setInteger(MediaFormat.KEY_FRAME_RATE, VFPS);
-            videoFormat.setInteger(MediaFormat.KEY_INTRA_REFRESH_PERIOD, VFPS);
             videoFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, VGOP / VFPS);
 
             String videoCodecName = list.findEncoderForFormat(videoFormat);
@@ -358,20 +357,22 @@ public class SrsEncoder {
     }
 
     public void muxH264Frame(byte[] frame) {
-        ByteBuffer bb = ByteBuffer.wrap(frame, 0, frame.length - 8);
-        vebi.offset = 0;
-        vebi.size = frame.length - 8;
+        if (frame!=null) {
+            ByteBuffer bb = ByteBuffer.wrap(frame, 0, frame.length - 8);
+            vebi.offset = 0;
+            vebi.size = frame.length - 8;
 
-        // Decode timestamp
-        long time = 0;
-        for (int i = 0; i < 8; i++) {
-            time <<= 8;
-            time |= (frame[vebi.size + i] & 0xFF);
+            // Decode timestamp
+            long time = 0;
+            for (int i = 0; i < 8; i++) {
+                time <<= 8;
+                time |= (frame[vebi.size + i] & 0xFF);
+            }
+            vebi.presentationTimeUs = time - mPresentTimeUs;
+
+            vebi.flags = 0;
+            mux264Frame(bb, vebi);
         }
-        vebi.presentationTimeUs = time - mPresentTimeUs;
-
-        vebi.flags = 0;
-        mux264Frame(bb, vebi);
 
         // Release codec output buffers
         int outBufferIndex = vencoder.dequeueOutputBuffer(vebi, 0);
