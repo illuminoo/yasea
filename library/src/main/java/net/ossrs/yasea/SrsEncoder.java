@@ -75,14 +75,7 @@ public class SrsEncoder {
     private byte[] u_frame;
     private byte[] v_frame;
     private int[] argb_frame;
-
-    /**
-     * ID for last encoded channel
-     */
-    private int lastChannelID = 0;
-
     private long lastPTS = -1;
-    private long syncPTS = -1;
 
     // Y, U (Cb) and V (Cr)
     // yuv420                     yuv yuv yuv yuv
@@ -115,7 +108,6 @@ public class SrsEncoder {
         // the referent PTS for video and audio encoder.
         mPresentTimeUs = System.currentTimeMillis() * 1000;
         lastPTS = 0;
-        syncPTS = 0;
 
         setEncoderResolution(vOutWidth, vOutHeight);
         setEncoderFps(VFPS);
@@ -146,7 +138,7 @@ public class SrsEncoder {
             // Note: landscape to portrait, 90 degree rotation, so we need to switch width and height in configuration
             MediaFormat videoFormat = MediaFormat.createVideoFormat(VCODEC, vOutWidth, vOutHeight);
             videoFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT, mVideoColorFormat);
-//            videoFormat.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 0);
+            videoFormat.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 0);
             videoFormat.setInteger(MediaFormat.KEY_BIT_RATE, vBitrate);
             videoFormat.setInteger(MediaFormat.KEY_FRAME_RATE, VFPS);
             videoFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, VGOP / VFPS);
@@ -357,28 +349,20 @@ public class SrsEncoder {
     }
 
     public void muxH264Frame(byte[] frame) {
-        if (frame!=null) {
-            ByteBuffer bb = ByteBuffer.wrap(frame, 0, frame.length - 8);
-            vebi.offset = 0;
-            vebi.size = frame.length - 8;
+        ByteBuffer bb = ByteBuffer.wrap(frame, 0, frame.length - 8);
+        vebi.offset = 0;
+        vebi.size = frame.length - 8;
 
-            // Decode timestamp
-            long time = 0;
-            for (int i = 0; i < 8; i++) {
-                time <<= 8;
-                time |= (frame[vebi.size + i] & 0xFF);
-            }
-            vebi.presentationTimeUs = time - mPresentTimeUs;
-
-            vebi.flags = 0;
-            mux264Frame(bb, vebi);
+        // Decode timestamp
+        long time = 0;
+        for (int i = 0; i < 8; i++) {
+            time <<= 8;
+            time |= (frame[vebi.size + i] & 0xFF);
         }
+        vebi.presentationTimeUs = time - mPresentTimeUs;
 
-        // Release codec output buffers
-        int outBufferIndex = vencoder.dequeueOutputBuffer(vebi, 0);
-        if (outBufferIndex >= 0) {
-            vencoder.releaseOutputBuffer(outBufferIndex, false);
-        }
+        vebi.flags = 0;
+        mux264Frame(bb, vebi);
     }
 
     public boolean muxH264Frame() {
@@ -409,7 +393,7 @@ public class SrsEncoder {
                 if (flvMuxer != null) flvMuxer.writeSampleData(videoFlvTrack, es, bi);
                 if (mp4Muxer != null) mp4Muxer.writeSampleData(videoMp4Track, es.duplicate(), bi);
 
-                if (!flvMuxer.needToFindKeyFrame) lastPTS = bi.presentationTimeUs;
+                lastPTS = bi.presentationTimeUs;
             }
 
             if (networkWeakTriggered) {
