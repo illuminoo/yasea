@@ -352,6 +352,7 @@ public class SrsEncoder {
         ByteBuffer bb = ByteBuffer.wrap(frame, 0, frame.length - 8);
         vebi.offset = 0;
         vebi.size = frame.length - 8;
+        vebi.flags = 0;
 
         // Decode timestamp
         long time = 0;
@@ -361,7 +362,6 @@ public class SrsEncoder {
         }
         vebi.presentationTimeUs = time - mPresentTimeUs;
 
-        vebi.flags = 0;
         mux264Frame(bb, vebi);
     }
 
@@ -422,7 +422,6 @@ public class SrsEncoder {
             ByteBuffer bb = aencoder.getOutputBuffer(outBufferIndex);
             muxAACFrame(bb, aebi);
             aencoder.releaseOutputBuffer(outBufferIndex, false);
-
             outBufferIndex = aencoder.dequeueOutputBuffer(aebi, 0);
         }
     }
