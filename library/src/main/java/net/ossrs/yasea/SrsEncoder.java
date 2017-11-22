@@ -35,8 +35,8 @@ public class SrsEncoder {
     public static int vOutWidth = 720;   // Note: the stride of resolution must be set as 16x for hard encoding with some chip like MTK
     public static int vOutHeight = 1280;  // Since Y component is quadruple size as U and V component, the stride must be set as 32x
     public static int vBitrate = 1200 * 1024;  // 1200 kbps
-    public static final int VFPS = 30;
-    public static final int VGOP = 30;
+    public static final int VFPS = 24;
+    public static final int VGOP = 24;
     public static final int ASAMPLERATE = 44100;
     public static int aChannelConfig = AudioFormat.CHANNEL_IN_STEREO;
     public static final int ABITRATE = 192 * 1024;  // 192 kbps
@@ -75,7 +75,8 @@ public class SrsEncoder {
     private byte[] u_frame;
     private byte[] v_frame;
     private int[] argb_frame;
-    private long lastPTS = -1;
+    private long lastVideoPTS = -1;
+    private long lastAudioPTS = -1;
 
     // Y, U (Cb) and V (Cr)
     // yuv420                     yuv yuv yuv yuv
@@ -107,7 +108,8 @@ public class SrsEncoder {
 
         // the referent PTS for video and audio encoder.
         mPresentTimeUs = System.currentTimeMillis() * 1000;
-        lastPTS = 0;
+        lastVideoPTS = 0;
+        lastAudioPTS = 0;
 
         setEncoderResolution(vOutWidth, vOutHeight);
         setEncoderFps(VFPS);
@@ -349,6 +351,7 @@ public class SrsEncoder {
     }
 
     public void muxH264Frame(byte[] frame) {
+        // Mux external frame
         ByteBuffer bb = ByteBuffer.wrap(frame, 0, frame.length - 8);
         vebi.offset = 0;
         vebi.size = frame.length - 8;
@@ -388,12 +391,12 @@ public class SrsEncoder {
         AtomicInteger videoFrameCacheNumber = flvMuxer.getVideoFrameCacheNumber();
         if (videoFrameCacheNumber != null && videoFrameCacheNumber.get() < VGOP) {
 
-            if (bi.presentationTimeUs >= lastPTS) {
+            if (bi.presentationTimeUs >= lastVideoPTS) {
 
                 if (flvMuxer != null) flvMuxer.writeSampleData(videoFlvTrack, es, bi);
                 if (mp4Muxer != null) mp4Muxer.writeSampleData(videoMp4Track, es.duplicate(), bi);
 
-                lastPTS = bi.presentationTimeUs;
+                lastVideoPTS = bi.presentationTimeUs;
             }
 
             if (networkWeakTriggered) {
@@ -433,8 +436,11 @@ public class SrsEncoder {
      * @param bi Buffer info
      */
     private void muxAACFrame(ByteBuffer es, MediaCodec.BufferInfo bi) {
-        if (flvMuxer != null) flvMuxer.writeSampleData(audioFlvTrack, es, bi);
-        if (mp4Muxer != null) mp4Muxer.writeSampleData(audioMp4Track, es.duplicate(), bi);
+        if (bi.presentationTimeUs >= lastAudioPTS) {
+            if (flvMuxer != null) flvMuxer.writeSampleData(audioFlvTrack, es, bi);
+            if (mp4Muxer != null) mp4Muxer.writeSampleData(audioMp4Track, es.duplicate(), bi);
+            lastAudioPTS = bi.presentationTimeUs;
+        }
     }
 
     public void onGetRgbaFrame(byte[] data, int width, int height) {
