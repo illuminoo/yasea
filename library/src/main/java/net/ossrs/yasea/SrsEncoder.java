@@ -330,41 +330,30 @@ public class SrsEncoder {
         }
     }
 
-    public byte[] getH264Frame() {
+    public Frame getH264Frame() {
         int outBufferIndex = vencoder.dequeueOutputBuffer(vebi, 0);
         if (outBufferIndex >= 0) {
+            Frame frame = new Frame();
             ByteBuffer bb = vencoder.getOutputBuffer(outBufferIndex);
-            byte[] frame = new byte[vebi.size + 8];
-            bb.get(frame, 0, vebi.size);
-
-            // Encode timestamp
-            long time = vebi.presentationTimeUs + mPresentTimeUs;
-            for (int i = 7; i >= 0; i--) {
-                frame[vebi.size + i] = (byte) (time & 0xFF);
-                time >>= 8;
-            }
-
+            frame.video = new byte[vebi.size];
+            bb.get(frame.video, 0, vebi.size);
+            frame.timestamp = vebi.presentationTimeUs + mPresentTimeUs;
             vencoder.releaseOutputBuffer(outBufferIndex, false);
             return frame;
         }
         return null;
     }
 
-    public void muxH264Frame(byte[] frame) {
-        // Mux external frame
-        ByteBuffer bb = ByteBuffer.wrap(frame, 0, frame.length - 8);
+    /**
+     * Mux external H264 frame
+     * @param frame External frame
+     */
+    public void muxH264Frame(Frame frame) {
+        ByteBuffer bb = ByteBuffer.wrap(frame.video, 0, frame.video.length);
         vebi.offset = 0;
-        vebi.size = frame.length - 8;
+        vebi.size = frame.video.length;
         vebi.flags = 0;
-
-        // Decode timestamp
-        long time = 0;
-        for (int i = 0; i < 8; i++) {
-            time <<= 8;
-            time |= (frame[vebi.size + i] & 0xFF);
-        }
-        vebi.presentationTimeUs = time - mPresentTimeUs;
-
+        vebi.presentationTimeUs = frame.timestamp - mPresentTimeUs;
         mux264Frame(bb, vebi);
     }
 
