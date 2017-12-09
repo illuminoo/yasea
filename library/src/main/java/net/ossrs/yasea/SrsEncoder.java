@@ -35,8 +35,8 @@ public class SrsEncoder {
     public static int vOutWidth = 720;   // Note: the stride of resolution must be set as 16x for hard encoding with some chip like MTK
     public static int vOutHeight = 1280;  // Since Y component is quadruple size as U and V component, the stride must be set as 32x
     public static int vBitrate = 1200 * 1024;  // 1200 kbps
-    public static final int VFPS = 24;
-    public static final int VGOP = 24;
+    public static final int VFPS = 30;
+    public static final int VGOP = 60;
     public static final int ASAMPLERATE = 44100;
     public static int aChannelConfig = AudioFormat.CHANNEL_IN_STEREO;
     public static final int ABITRATE = 192 * 1024;  // 192 kbps
