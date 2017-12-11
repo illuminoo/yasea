@@ -346,6 +346,7 @@ public class SrsEncoder {
 
     /**
      * Mux external H264 frame
+     *
      * @param frame External frame
      */
     public void muxH264Frame(Frame frame) {
@@ -380,13 +381,13 @@ public class SrsEncoder {
         AtomicInteger videoFrameCacheNumber = flvMuxer.getVideoFrameCacheNumber();
         if (videoFrameCacheNumber != null && videoFrameCacheNumber.get() < VGOP) {
 
-            if (bi.presentationTimeUs >= lastVideoPTS) {
+//            if (bi.presentationTimeUs >= lastVideoPTS) {
 
-                if (flvMuxer != null) flvMuxer.writeSampleData(videoFlvTrack, es, bi);
-                if (mp4Muxer != null) mp4Muxer.writeSampleData(videoMp4Track, es.duplicate(), bi);
+            if (flvMuxer != null) flvMuxer.writeSampleData(videoFlvTrack, es, bi);
+            if (mp4Muxer != null) mp4Muxer.writeSampleData(videoMp4Track, es.duplicate(), bi);
 
-                lastVideoPTS = bi.presentationTimeUs;
-            }
+//                lastVideoPTS = bi.presentationTimeUs;
+//            }
 
             if (networkWeakTriggered) {
                 networkWeakTriggered = false;
@@ -425,11 +426,11 @@ public class SrsEncoder {
      * @param bi Buffer info
      */
     private void muxAACFrame(ByteBuffer es, MediaCodec.BufferInfo bi) {
-        if (bi.presentationTimeUs >= lastAudioPTS) {
-            if (flvMuxer != null) flvMuxer.writeSampleData(audioFlvTrack, es, bi);
-            if (mp4Muxer != null) mp4Muxer.writeSampleData(audioMp4Track, es.duplicate(), bi);
-            lastAudioPTS = bi.presentationTimeUs;
-        }
+//        if (bi.presentationTimeUs >= lastAudioPTS) {
+        if (flvMuxer != null) flvMuxer.writeSampleData(audioFlvTrack, es, bi);
+        if (mp4Muxer != null) mp4Muxer.writeSampleData(audioMp4Track, es.duplicate(), bi);
+//            lastAudioPTS = bi.presentationTimeUs;
+//        }
     }
 
     public void onGetRgbaFrame(byte[] data, int width, int height) {
