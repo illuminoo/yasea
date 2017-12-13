@@ -56,7 +56,7 @@ public class SrsEncoder {
     private boolean useSoftEncoder = false;
     private boolean canSoftEncode = false;
 
-    private long mPresentTimeUs;
+    public long mPresentTimeUs;
 
     private int mVideoColorFormat;
 
@@ -350,6 +350,7 @@ public class SrsEncoder {
      * @param frame External frame
      */
     public void muxH264Frame(Frame frame) {
+        if (frame==null) return;
         ByteBuffer bb = ByteBuffer.wrap(frame.video, 0, frame.video.length);
         vebi.offset = 0;
         vebi.size = frame.video.length;
