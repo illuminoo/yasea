@@ -10,6 +10,11 @@ import java.io.Serializable;
 public class Frame implements Serializable {
 
     /**
+     * Key frame
+     */
+    public boolean keyframe;
+
+    /**
      * Timestamp
      */
     public long timestamp;

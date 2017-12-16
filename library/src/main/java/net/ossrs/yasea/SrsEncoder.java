@@ -75,6 +75,7 @@ public class SrsEncoder {
     private byte[] u_frame;
     private byte[] v_frame;
     private int[] argb_frame;
+    private long lastVideoDTS = -1;
     private long lastVideoPTS = -1;
     private long lastAudioPTS = -1;
 
@@ -107,8 +108,9 @@ public class SrsEncoder {
         }
 
         // the referent PTS for video and audio encoder.
-        mPresentTimeUs = System.currentTimeMillis() * 1000;
+        mPresentTimeUs = System.nanoTime() / 1000;
         lastVideoPTS = 0;
+        lastVideoDTS = 0;
         lastAudioPTS = 0;
 
         setEncoderResolution(vOutWidth, vOutHeight);
@@ -337,7 +339,8 @@ public class SrsEncoder {
             ByteBuffer bb = vencoder.getOutputBuffer(outBufferIndex);
             frame.video = new byte[vebi.size];
             bb.get(frame.video, 0, vebi.size);
-            frame.timestamp = vebi.presentationTimeUs + mPresentTimeUs;
+            frame.keyframe = (vebi.flags & MediaCodec.BUFFER_FLAG_KEY_FRAME) != 0;
+            frame.timestamp = vebi.presentationTimeUs;
             vencoder.releaseOutputBuffer(outBufferIndex, false);
             return frame;
         }
@@ -354,8 +357,12 @@ public class SrsEncoder {
         ByteBuffer bb = ByteBuffer.wrap(frame.video, 0, frame.video.length);
         vebi.offset = 0;
         vebi.size = frame.video.length;
-        vebi.flags = 0;
-        vebi.presentationTimeUs = frame.timestamp - mPresentTimeUs;
+
+        if (frame.keyframe) vebi.flags = MediaCodec.BUFFER_FLAG_KEY_FRAME;
+        else vebi.flags = 0;
+
+        vebi.presentationTimeUs = frame.timestamp;
+
         mux264Frame(bb, vebi);
     }
 
@@ -382,10 +389,10 @@ public class SrsEncoder {
         AtomicInteger videoFrameCacheNumber = flvMuxer.getVideoFrameCacheNumber();
         if (videoFrameCacheNumber != null && videoFrameCacheNumber.get() < VGOP) {
 
-//            if (bi.presentationTimeUs >= lastVideoPTS) {
+//            if (bi.presentationTimeUs>=lastVideoPTS) {
 
-            if (flvMuxer != null) flvMuxer.writeSampleData(videoFlvTrack, es, bi);
-            if (mp4Muxer != null) mp4Muxer.writeSampleData(videoMp4Track, es.duplicate(), bi);
+                if (flvMuxer != null) flvMuxer.writeSampleData(videoFlvTrack, es, bi);
+                if (mp4Muxer != null) mp4Muxer.writeSampleData(videoMp4Track, es.duplicate(), bi);
 
 //                lastVideoPTS = bi.presentationTimeUs;
 //            }
@@ -405,7 +412,7 @@ public class SrsEncoder {
         if (inBufferIndex >= 0) {
             ByteBuffer bb = aencoder.getInputBuffer(inBufferIndex);
             bb.put(data, 0, size);
-            long pts = System.currentTimeMillis() * 1000 - mPresentTimeUs;
+            long pts = System.nanoTime() / 1000 - mPresentTimeUs;
             aencoder.queueInputBuffer(inBufferIndex, 0, size, pts, 0);
         }
     }
@@ -451,7 +458,7 @@ public class SrsEncoder {
     }
 
     public void encodeYuvFrame(byte[] frame) {
-        long pts = System.currentTimeMillis() * 1000 - mPresentTimeUs;
+        long pts = System.nanoTime() / 1000 - mPresentTimeUs;
         encodeYuvFrame(frame, pts);
     }
 
