@@ -39,9 +39,11 @@ public class SrsFlvMuxer {
     private SrsAllocator mAudioAllocator = new SrsAllocator(AUDIO_ALLOC_SIZE);
     private ConcurrentLinkedQueue<SrsFlvFrame> mFlvTagCache = new ConcurrentLinkedQueue<>();
 
-    private static final int VIDEO_TRACK = 100;
-    private static final int AUDIO_TRACK = 101;
+    public static final int VIDEO_TRACK = 100;
+    public static final int AUDIO_TRACK = 101;
     private static final String TAG = "SrsFlvMuxer";
+
+    private long mPresentTimeUs;
 
     /**
      * constructor.
@@ -134,6 +136,8 @@ public class SrsFlvMuxer {
      * start to the remote server for remux.
      */
     public void start(final String rtmpUrl) {
+        mPresentTimeUs = System.currentTimeMillis() * 1000;
+
         worker = new Thread(new Runnable() {
             @Override
             public void run() {
@@ -205,14 +209,18 @@ public class SrsFlvMuxer {
      * @param bufferInfo The buffer information related to this sample.
      */
     public void writeSampleData(int trackIndex, ByteBuffer byteBuf, MediaCodec.BufferInfo bufferInfo) {
-//        if (bufferInfo.offset > 0) {
-//            Log.w(TAG, String.format("encoded frame %dB, offset=%d pts=%dms",
-//                    bufferInfo.size, bufferInfo.offset, bufferInfo.presentationTimeUs / 1000
-//            ));
-//        }
+        bufferInfo.presentationTimeUs -= mPresentTimeUs;
+        if (bufferInfo.presentationTimeUs<0) {
+            bufferInfo.presentationTimeUs = 0;
+        }
 
         if (VIDEO_TRACK == trackIndex) {
-            flv.writeVideoSample(byteBuf, bufferInfo);
+            AtomicInteger videoFrameCacheNumber = getVideoFrameCacheNumber();
+            if (videoFrameCacheNumber != null && videoFrameCacheNumber.get() < SrsAvcEncoder.VGOP) {
+                flv.writeVideoSample(byteBuf, bufferInfo);
+            } else {
+                Log.w(TAG, "Network throughput too low");
+            }
         } else {
             flv.writeAudioSample(byteBuf, bufferInfo);
         }

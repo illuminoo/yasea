@@ -36,7 +36,7 @@ public class SrsEncoder {
     public static int vOutHeight = 1280;  // Since Y component is quadruple size as U and V component, the stride must be set as 32x
     public static int vBitrate = 1200 * 1024;  // 1200 kbps
     public static final int VFPS = 30;
-    public static final int VGOP = 60;
+    public static final int VGOP = 30;
     public static final int ASAMPLERATE = 44100;
     public static int aChannelConfig = AudioFormat.CHANNEL_IN_STEREO;
     public static final int ABITRATE = 192 * 1024;  // 192 kbps
@@ -49,6 +49,7 @@ public class SrsEncoder {
     private MediaCodec vencoder;
     private MediaCodec aencoder;
     private MediaCodec.BufferInfo vebi = new MediaCodec.BufferInfo();
+    private MediaCodec.BufferInfo rebi = new MediaCodec.BufferInfo();
     private MediaCodec.BufferInfo aebi = new MediaCodec.BufferInfo();
 
     private boolean networkWeakTriggered = false;
@@ -56,7 +57,7 @@ public class SrsEncoder {
     private boolean useSoftEncoder = false;
     private boolean canSoftEncode = false;
 
-    public long mPresentTimeUs;
+    private long mPresentTimeUs;
 
     private int mVideoColorFormat;
 
@@ -75,7 +76,6 @@ public class SrsEncoder {
     private byte[] u_frame;
     private byte[] v_frame;
     private int[] argb_frame;
-    private long lastVideoDTS = -1;
     private long lastVideoPTS = -1;
     private long lastAudioPTS = -1;
 
@@ -108,9 +108,8 @@ public class SrsEncoder {
         }
 
         // the referent PTS for video and audio encoder.
-        mPresentTimeUs = System.nanoTime() / 1000;
+        mPresentTimeUs = System.currentTimeMillis() * 1000;
         lastVideoPTS = 0;
-        lastVideoDTS = 0;
         lastAudioPTS = 0;
 
         setEncoderResolution(vOutWidth, vOutHeight);
@@ -340,7 +339,7 @@ public class SrsEncoder {
             frame.video = new byte[vebi.size];
             bb.get(frame.video, 0, vebi.size);
             frame.keyframe = (vebi.flags & MediaCodec.BUFFER_FLAG_KEY_FRAME) != 0;
-            frame.timestamp = vebi.presentationTimeUs;
+            frame.timestamp = vebi.presentationTimeUs + mPresentTimeUs;
             vencoder.releaseOutputBuffer(outBufferIndex, false);
             return frame;
         }
@@ -355,15 +354,15 @@ public class SrsEncoder {
     public void muxH264Frame(Frame frame) {
         if (frame==null) return;
         ByteBuffer bb = ByteBuffer.wrap(frame.video, 0, frame.video.length);
-        vebi.offset = 0;
-        vebi.size = frame.video.length;
+        rebi.offset = 0;
+        rebi.size = frame.video.length;
 
-        if (frame.keyframe) vebi.flags = MediaCodec.BUFFER_FLAG_KEY_FRAME;
-        else vebi.flags = 0;
+        if (frame.keyframe) rebi.flags = MediaCodec.BUFFER_FLAG_KEY_FRAME;
+        else rebi.flags = 0;
 
-        vebi.presentationTimeUs = frame.timestamp;
+        rebi.presentationTimeUs = frame.timestamp - mPresentTimeUs;
 
-        mux264Frame(bb, vebi);
+        mux264Frame(bb, rebi);
     }
 
     public boolean muxH264Frame() {
@@ -412,8 +411,7 @@ public class SrsEncoder {
         if (inBufferIndex >= 0) {
             ByteBuffer bb = aencoder.getInputBuffer(inBufferIndex);
             bb.put(data, 0, size);
-            long pts = System.nanoTime() / 1000 - mPresentTimeUs;
-            aencoder.queueInputBuffer(inBufferIndex, 0, size, pts, 0);
+            aencoder.queueInputBuffer(inBufferIndex, 0, size, getPTS(), 0);
         }
     }
 
@@ -458,8 +456,11 @@ public class SrsEncoder {
     }
 
     public void encodeYuvFrame(byte[] frame) {
-        long pts = System.nanoTime() / 1000 - mPresentTimeUs;
-        encodeYuvFrame(frame, pts);
+        encodeYuvFrame(frame, getPTS());
+    }
+
+    private long getPTS() {
+        return System.currentTimeMillis() * 1000 - mPresentTimeUs;
     }
 
     public byte[] RGBAtoYUV(byte[] data, int width, int height) {
