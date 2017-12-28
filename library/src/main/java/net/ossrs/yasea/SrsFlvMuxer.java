@@ -43,7 +43,10 @@ public class SrsFlvMuxer {
     public static final int AUDIO_TRACK = 101;
     private static final String TAG = "SrsFlvMuxer";
 
-    private long mPresentTimeUs;
+    /**
+     * Start presentation timestamp
+     */
+    private long startPTS;
 
     /**
      * constructor.
@@ -136,7 +139,7 @@ public class SrsFlvMuxer {
      * start to the remote server for remux.
      */
     public void start(final String rtmpUrl) {
-        mPresentTimeUs = System.currentTimeMillis() * 1000;
+        startPTS = System.currentTimeMillis() * 1000;
 
         worker = new Thread(new Runnable() {
             @Override
@@ -209,10 +212,7 @@ public class SrsFlvMuxer {
      * @param bufferInfo The buffer information related to this sample.
      */
     public void writeSampleData(int trackIndex, ByteBuffer byteBuf, MediaCodec.BufferInfo bufferInfo) {
-        bufferInfo.presentationTimeUs -= mPresentTimeUs;
-        if (bufferInfo.presentationTimeUs<0) {
-            bufferInfo.presentationTimeUs = 0;
-        }
+        bufferInfo.presentationTimeUs -= startPTS;
 
         if (VIDEO_TRACK == trackIndex) {
             AtomicInteger videoFrameCacheNumber = getVideoFrameCacheNumber();

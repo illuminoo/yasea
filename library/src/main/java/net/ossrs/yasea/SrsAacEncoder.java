@@ -28,9 +28,13 @@ public class SrsAacEncoder extends MediaCodec.Callback {
     public static final String ACODEC = "audio/mp4a-latm";
     public static final int ASAMPLERATE = 44100;
     public static int aChannelConfig = AudioFormat.CHANNEL_IN_STEREO;
-    public static final int ABITRATE = 192 * 1024;  // 192 kbps
+    public static final int ABITRATE = 128 * 1024;  // 128 kbps
 
     private final SrsFlvMuxer muxer;
+
+    public final MediaFormat mediaFormat;
+    private final byte[] mPcmBuffer;
+    private final String codecName;
 
     private MediaCodec aencoder;
     private MediaCodec.BufferInfo aebi = new MediaCodec.BufferInfo();
@@ -51,21 +55,19 @@ public class SrsAacEncoder extends MediaCodec.Callback {
     private AutomaticGainControl agc;
 
     /**
-     * PCM buffer
-     */
-    private byte[] mPcmBuffer;
-
-    /**
-     * Audio thread
-     */
-    private Thread aworker;
-
-    /**
      * Constructor
      * @param muxer FLV muxer
      */
     public SrsAacEncoder(SrsFlvMuxer muxer) {
         this.muxer = muxer;
+        mPcmBuffer = new byte[getPcmBufferSize()];
+
+        MediaCodecList list = new MediaCodecList(MediaCodecList.REGULAR_CODECS);
+        int ach = aChannelConfig == AudioFormat.CHANNEL_IN_STEREO ? 2 : 1;
+        mediaFormat = MediaFormat.createAudioFormat(ACODEC, ASAMPLERATE, ach);
+        mediaFormat.setInteger(MediaFormat.KEY_BIT_RATE, ABITRATE);
+        mediaFormat.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, getPcmBufferSize());
+        codecName = list.findEncoderForFormat(mediaFormat);
     }
 
     /**
@@ -74,9 +76,10 @@ public class SrsAacEncoder extends MediaCodec.Callback {
      * @return True when successful
      */
     public boolean start() {
+
         try {
+            // Prepare microphone
             mic = chooseAudioRecord();
-            mPcmBuffer = new byte[getPcmBufferSize()];
 
             if (AcousticEchoCanceler.isAvailable()) {
                 aec = AcousticEchoCanceler.create(mic.getAudioSessionId());
@@ -89,13 +92,7 @@ public class SrsAacEncoder extends MediaCodec.Callback {
             }
             mic.startRecording();
 
-            MediaCodecList list = new MediaCodecList(MediaCodecList.REGULAR_CODECS);
-            int ach = aChannelConfig == AudioFormat.CHANNEL_IN_STEREO ? 2 : 1;
-            MediaFormat mediaFormat = MediaFormat.createAudioFormat(ACODEC, ASAMPLERATE, ach);
-            mediaFormat.setInteger(MediaFormat.KEY_BIT_RATE, ABITRATE);
-            mediaFormat.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, getPcmBufferSize());
-            String codecName = list.findEncoderForFormat(mediaFormat);
-
+            // Start Audio encoder
             aencoder = MediaCodec.createByCodecName(codecName);
             aencoder.configure(mediaFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
             aencoder.setCallback(this);
@@ -136,7 +133,6 @@ public class SrsAacEncoder extends MediaCodec.Callback {
             agc = null;
         }
     }
-
 
     private AudioRecord chooseAudioRecord() {
         AudioRecord mic = new AudioRecord(MediaRecorder.AudioSource.DEFAULT, SrsAacEncoder.ASAMPLERATE,
