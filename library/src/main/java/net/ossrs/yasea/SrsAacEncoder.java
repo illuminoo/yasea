@@ -157,6 +157,21 @@ public class SrsAacEncoder extends MediaCodec.Callback {
                 AudioFormat.ENCODING_PCM_16BIT);
     }
 
+    public void captureAudio() {
+        int inBufferIndex = aencoder.dequeueInputBuffer(-1);
+        if (inBufferIndex >= 0) {
+            onInputBufferAvailable(aencoder, inBufferIndex);
+        }
+    }
+
+    public void muxAudio() {
+        int outBufferIndex = aencoder.dequeueOutputBuffer(aebi, 0);
+        while (outBufferIndex >= 0) {
+            onOutputBufferAvailable(aencoder, outBufferIndex, aebi);
+            outBufferIndex = aencoder.dequeueOutputBuffer(aebi, 0);
+        }
+    }
+
     @Override
     public void onInputBufferAvailable(MediaCodec codec, int index) {
         int size = mic.read(mPcmBuffer, 0, mPcmBuffer.length);
