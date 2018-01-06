@@ -461,6 +461,11 @@ static void
 libenc_ARGBToOverlay(JNIEnv *env, jobject thiz, jintArray frame, jint src_width,
                      jint src_height, jboolean need_flip, jint rotate_degree) {
 
+    if (frame==NULL) {
+        useOverlay = false;
+        return;
+    }
+
     jint *argb_frame = env->GetIntArrayElements(frame, NULL);
     uint8_t *data = (uint8_t *) argb_frame;
     int y_size = src_width * src_height;

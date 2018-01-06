@@ -26,7 +26,7 @@ public class SrsAvcEncoder {
 
     public static final String CODEC = "video/avc";
     public static final int VFPS = 30;
-    public static final int VGOP = 30;
+    public static final int VGOP = 60;
 
     private final String x264Preset;
     public final int outWidth;
@@ -201,9 +201,12 @@ public class SrsAvcEncoder {
     }
 
     public void setOverlay(Bitmap overlay) {
-        if (overlay == null) return;
-        overlay.getPixels(argb_frame, 0, outWidth, 0, 0, outWidth, outHeight);
-        ARGBToOverlay(argb_frame, outWidth, outHeight, false, 0);
+        if (overlay==null) {
+            ARGBToOverlay(null, outWidth, outHeight, false, 0);
+        } else {
+            overlay.getPixels(argb_frame, 0, outWidth, 0, 0, outWidth, outHeight);
+            ARGBToOverlay(argb_frame, outWidth, outHeight, false, 0);
+        }
     }
 
     public byte[] ARGBtoYUV(int[] data, int width, int height, Rect boundingBox) {
