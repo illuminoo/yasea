@@ -139,7 +139,8 @@ public class SrsFlvMuxer {
      * start to the remote server for remux.
      */
     public void start(final String rtmpUrl) {
-        startPTS = System.currentTimeMillis() * 1000;
+        startPTS = 0;
+        needToFindKeyFrame = true;
 
         worker = new Thread(new Runnable() {
             @Override
@@ -212,9 +213,11 @@ public class SrsFlvMuxer {
      * @param bufferInfo The buffer information related to this sample.
      */
     public void writeSampleData(int trackIndex, ByteBuffer byteBuf, MediaCodec.BufferInfo bufferInfo) {
-        bufferInfo.presentationTimeUs -= startPTS;
-
         if (VIDEO_TRACK == trackIndex) {
+            if (startPTS==0) startPTS = bufferInfo.presentationTimeUs;
+            bufferInfo.presentationTimeUs -= startPTS;
+            if (bufferInfo.presentationTimeUs<0) return;
+
             AtomicInteger videoFrameCacheNumber = getVideoFrameCacheNumber();
             if (videoFrameCacheNumber != null && videoFrameCacheNumber.get() < SrsAvcEncoder.VGOP) {
                 flv.writeVideoSample(byteBuf, bufferInfo);
@@ -222,6 +225,10 @@ public class SrsFlvMuxer {
                 Log.w(TAG, "Network throughput too low");
             }
         } else {
+            if (startPTS==0) return;
+            bufferInfo.presentationTimeUs -= startPTS;
+            if (bufferInfo.presentationTimeUs<0) return;
+
             flv.writeAudioSample(byteBuf, bufferInfo);
         }
     }
