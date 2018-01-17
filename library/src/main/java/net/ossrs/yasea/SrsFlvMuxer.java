@@ -214,7 +214,7 @@ public class SrsFlvMuxer {
      */
     public void writeSampleData(int trackIndex, ByteBuffer byteBuf, MediaCodec.BufferInfo bufferInfo) {
         if (VIDEO_TRACK == trackIndex) {
-            if (startPTS==0) startPTS = bufferInfo.presentationTimeUs;
+            if (startPTS==0) startPTS = bufferInfo.presentationTimeUs - 100000;
             bufferInfo.presentationTimeUs -= startPTS;
             if (bufferInfo.presentationTimeUs<0) return;
 
