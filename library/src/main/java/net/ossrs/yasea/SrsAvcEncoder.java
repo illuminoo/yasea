@@ -92,6 +92,7 @@ public class SrsAvcEncoder {
 
     /**
      * Start encoder
+     *
      * @return True when successful
      */
     public boolean start() {
@@ -127,7 +128,7 @@ public class SrsAvcEncoder {
     }
 
     public void encodeYuvFrame(byte[] frame) {
-        encodeYuvFrame(frame, System.currentTimeMillis() * 1000);
+        encodeYuvFrame(frame, System.nanoTime() / 1000);
     }
 
     private void encodeYuvFrame(byte[] yuvFrame, long pts) {
@@ -201,7 +202,7 @@ public class SrsAvcEncoder {
     }
 
     public void setOverlay(Bitmap overlay) {
-        if (overlay==null) {
+        if (overlay == null) {
             ARGBToOverlay(null, outWidth, outHeight, false, 0);
         } else {
             overlay.getPixels(argb_frame, 0, outWidth, 0, 0, outWidth, outHeight);

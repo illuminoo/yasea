@@ -178,7 +178,7 @@ public class SrsAacEncoder extends MediaCodec.Callback {
         if (size > 0) {
             ByteBuffer bb = codec.getInputBuffer(index);
             bb.put(mPcmBuffer, 0, size);
-            codec.queueInputBuffer(index, 0, size, System.currentTimeMillis() * 1000, 0);
+            codec.queueInputBuffer(index, 0, size, System.nanoTime() / 1000, 0);
         }
     }
 
