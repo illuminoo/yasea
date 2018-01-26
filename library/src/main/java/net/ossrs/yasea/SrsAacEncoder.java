@@ -56,6 +56,7 @@ public class SrsAacEncoder extends MediaCodec.Callback {
 
     /**
      * Constructor
+     *
      * @param muxer FLV muxer
      */
     public SrsAacEncoder(SrsFlvMuxer muxer) {
@@ -174,19 +175,27 @@ public class SrsAacEncoder extends MediaCodec.Callback {
 
     @Override
     public void onInputBufferAvailable(MediaCodec codec, int index) {
-        int size = mic.read(mPcmBuffer, 0, mPcmBuffer.length);
-        if (size > 0) {
-            ByteBuffer bb = codec.getInputBuffer(index);
-            bb.put(mPcmBuffer, 0, size);
-            codec.queueInputBuffer(index, 0, size, System.nanoTime() / 1000, 0);
+        try {
+            int size = mic.read(mPcmBuffer, 0, mPcmBuffer.length);
+            if (size > 0) {
+                ByteBuffer bb = codec.getInputBuffer(index);
+                bb.put(mPcmBuffer, 0, size);
+                codec.queueInputBuffer(index, 0, size, System.nanoTime() / 1000, 0);
+            }
+        } catch (IllegalStateException e) {
+            // Ignore
         }
     }
 
     @Override
     public void onOutputBufferAvailable(MediaCodec codec, int index, MediaCodec.BufferInfo info) {
-        ByteBuffer bb = codec.getOutputBuffer(index);
-        muxer.writeSampleData(SrsFlvMuxer.AUDIO_TRACK, bb, info);
-        codec.releaseOutputBuffer(index, false);
+        try {
+            ByteBuffer bb = codec.getOutputBuffer(index);
+            muxer.writeSampleData(SrsFlvMuxer.AUDIO_TRACK, bb, info);
+            codec.releaseOutputBuffer(index, false);
+        } catch (IllegalStateException e) {
+            // Ignore
+        }
     }
 
     @Override
