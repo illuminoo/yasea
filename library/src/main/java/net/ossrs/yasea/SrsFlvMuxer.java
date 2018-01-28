@@ -218,13 +218,13 @@ public class SrsFlvMuxer {
             bufferInfo.presentationTimeUs -= startPTS;
             if (bufferInfo.presentationTimeUs<0) return;
 
-//            AtomicInteger videoFrameCacheNumber = getVideoFrameCacheNumber();
-//            if (videoFrameCacheNumber != null && videoFrameCacheNumber.get() < SrsAvcEncoder.VGOP) {
+            AtomicInteger videoFrameCacheNumber = getVideoFrameCacheNumber();
+            if (videoFrameCacheNumber != null && videoFrameCacheNumber.get() < 5 * SrsAvcEncoder.VGOP) {
                 flv.writeVideoSample(byteBuf, bufferInfo);
-//            } else {
-//                Log.w(TAG, "Network throughput too low");
-//                needToFindKeyFrame = true;
-//            }
+            } else {
+                Log.w(TAG, "Network throughput too low");
+                needToFindKeyFrame = true;
+            }
         } else {
             if (startPTS==0) return;
             bufferInfo.presentationTimeUs -= startPTS;
