@@ -181,7 +181,7 @@ public class SrsFlvMuxer {
                 }
             }
         });
-        worker.setPriority(Thread.MAX_PRIORITY);
+//        worker.setPriority(Thread.MAX_PRIORITY);
         worker.setDaemon(true);
         worker.start();
     }
