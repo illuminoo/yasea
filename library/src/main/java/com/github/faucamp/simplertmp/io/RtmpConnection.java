@@ -346,7 +346,7 @@ public class RtmpConnection implements RtmpPublisher {
                 // It will raise SocketException in sendRtmpPacket
                 socket.shutdownOutput();
             } catch (IOException ioe) {
-                // Ignore illegal state
+                ioe.printStackTrace();
             }
 
             // shutdown rxPacketHandler
@@ -562,7 +562,7 @@ public class RtmpConnection implements RtmpPublisher {
                             handleRxInvoke((Command) rtmpPacket);
                             break;
                         default:
-                            Log.d(TAG, "handleRxPacketLoop(): Not handling unimplemented/unknown packet of type: " + rtmpPacket.getHeader().getMessageType());
+                            Log.w(TAG, "handleRxPacketLoop(): Not handling unimplemented/unknown packet of type: " + rtmpPacket.getHeader().getMessageType());
                             break;
                     }
                 }

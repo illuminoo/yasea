@@ -149,35 +149,34 @@ public class SrsFlvMuxer {
                     return;
                 }
 
-                try {
-                    while (!worker.interrupted()) {
-                        while (!mFlvTagCache.isEmpty()) {
-                            SrsFlvFrame frame = mFlvTagCache.poll();
-                            if (frame.isSequenceHeader()) {
-                                if (frame.isVideo()) {
-                                    mVideoSequenceHeader = frame;
-                                    sendFlvTag(mVideoSequenceHeader);
-                                } else if (frame.isAudio()) {
-                                    mAudioSequenceHeader = frame;
-                                    sendFlvTag(mAudioSequenceHeader);
-                                }
-                            } else {
-                                if (frame.isVideo() && mVideoSequenceHeader != null) {
-                                    sendFlvTag(frame);
-                                } else if (frame.isAudio() && mAudioSequenceHeader != null) {
-                                    sendFlvTag(frame);
-                                }
+                while (!Thread.interrupted()) {
+                    while (!mFlvTagCache.isEmpty()) {
+                        SrsFlvFrame frame = mFlvTagCache.poll();
+                        if (frame.isSequenceHeader()) {
+                            if (frame.isVideo()) {
+                                mVideoSequenceHeader = frame;
+                                sendFlvTag(mVideoSequenceHeader);
+                            } else if (frame.isAudio()) {
+                                mAudioSequenceHeader = frame;
+                                sendFlvTag(mAudioSequenceHeader);
+                            }
+                        } else {
+                            if (frame.isVideo() && mVideoSequenceHeader != null) {
+                                sendFlvTag(frame);
+                            } else if (frame.isAudio() && mAudioSequenceHeader != null) {
+                                sendFlvTag(frame);
                             }
                         }
-
-                        // Waiting for next frame
-                        synchronized (txFrameLock) {
+                    }
+                    // Waiting for next frame
+                    synchronized (txFrameLock) {
+                        try {
+                            // isEmpty() may take some time, so we set timeout to detect next frame
                             txFrameLock.wait(500);
+                        } catch (InterruptedException ie) {
+                            worker.interrupt();
                         }
                     }
-
-                } catch (InterruptedException ie) {
-                    Log.i(TAG, "Stopped");
                 }
             }
         });
@@ -197,11 +196,13 @@ public class SrsFlvMuxer {
                 worker.join(5000);
             } catch (InterruptedException e) {
                 Log.e(TAG, e.getMessage(), e);
+                worker.interrupt();
             }
+            worker = null;
         }
         flv.reset();
-        needToFindKeyFrame = true;
         disconnect();
+        needToFindKeyFrame = true;
         Log.i(TAG, "SrsFlvMuxer closed");
     }
 
@@ -214,21 +215,21 @@ public class SrsFlvMuxer {
      */
     public void writeSampleData(int trackIndex, ByteBuffer byteBuf, MediaCodec.BufferInfo bufferInfo) {
         if (VIDEO_TRACK == trackIndex) {
-            if (startPTS==0) startPTS = bufferInfo.presentationTimeUs - 100000;
+            if (startPTS == 0) startPTS = bufferInfo.presentationTimeUs - 1000;
             bufferInfo.presentationTimeUs -= startPTS;
-            if (bufferInfo.presentationTimeUs<0) return;
+            if (bufferInfo.presentationTimeUs < 0) return;
 
             AtomicInteger videoFrameCacheNumber = getVideoFrameCacheNumber();
-            if (videoFrameCacheNumber != null && videoFrameCacheNumber.get() < 5 * SrsAvcEncoder.VGOP) {
+            if (videoFrameCacheNumber != null && videoFrameCacheNumber.get() < SrsAvcEncoder.VGOP) {
                 flv.writeVideoSample(byteBuf, bufferInfo);
             } else {
                 Log.w(TAG, "Network throughput too low");
                 needToFindKeyFrame = true;
             }
         } else {
-            if (startPTS==0) return;
+            if (startPTS == 0) return;
             bufferInfo.presentationTimeUs -= startPTS;
-            if (bufferInfo.presentationTimeUs<0) return;
+            if (bufferInfo.presentationTimeUs < 0) return;
 
             flv.writeAudioSample(byteBuf, bufferInfo);
         }
@@ -283,8 +284,6 @@ public class SrsFlvMuxer {
         // 18 = script data
         public final static int Script = 18;
     }
-
-    ;
 
     // E.4.3.1 VIDEODATA
     // CodecID UB [4]
