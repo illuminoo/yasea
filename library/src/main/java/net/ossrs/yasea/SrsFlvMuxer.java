@@ -31,7 +31,7 @@ public class SrsFlvMuxer {
     private Thread worker;
     private final Object txFrameLock = new Object();
 
-    private SrsFlv flv = new SrsFlv();
+    public SrsFlv flv = new SrsFlv();
     public boolean needToFindKeyFrame = true;
     private SrsFlvFrame mVideoSequenceHeader;
     private SrsFlvFrame mAudioSequenceHeader;
@@ -46,7 +46,7 @@ public class SrsFlvMuxer {
     /**
      * Start presentation timestamp
      */
-    private long startPTS;
+    public long startPTS;
 
     /**
      * constructor.
@@ -93,19 +93,25 @@ public class SrsFlvMuxer {
         }
     }
 
-    private void disconnect() {
+    public void disconnect() {
         try {
             publisher.close();
         } catch (IllegalStateException e) {
             // Ignore illegal state.
         }
+        mFlvTagCache.clear();
+        flv.reset();
+
         connected = false;
         mVideoSequenceHeader = null;
         mAudioSequenceHeader = null;
         Log.i(TAG, "worker: disconnect ok.");
     }
 
-    private boolean connect(String url) {
+    public boolean connect(String url) {
+        startPTS = 0;
+        needToFindKeyFrame = true;
+
         if (!connected) {
             Log.i(TAG, String.format("worker: connecting to RTMP server by url=%s\n", url));
             if (publisher.connect(url)) {
@@ -150,46 +156,49 @@ public class SrsFlvMuxer {
                 }
 
                 while (!Thread.interrupted()) {
-                    while (!mFlvTagCache.isEmpty()) {
-                        SrsFlvFrame frame = mFlvTagCache.poll();
-                        if (frame.isSequenceHeader()) {
-                            if (frame.isVideo()) {
-                                mVideoSequenceHeader = frame;
-                                sendFlvTag(mVideoSequenceHeader);
-                            } else if (frame.isAudio()) {
-                                mAudioSequenceHeader = frame;
-                                sendFlvTag(mAudioSequenceHeader);
-                            }
-                        } else {
-                            if (frame.isVideo() && mVideoSequenceHeader != null) {
-                                sendFlvTag(frame);
-                            } else if (frame.isAudio() && mAudioSequenceHeader != null) {
-                                sendFlvTag(frame);
-                            }
-                        }
-                    }
-                    // Waiting for next frame
-                    synchronized (txFrameLock) {
-                        try {
-                            // isEmpty() may take some time, so we set timeout to detect next frame
-                            txFrameLock.wait(500);
-                        } catch (InterruptedException ie) {
-                            worker.interrupt();
-                        }
-                    }
+                    sendFlvTags();
+//                    // Waiting for next frame
+//                    synchronized (txFrameLock) {
+//                        try {
+//                            // isEmpty() may take some time, so we set timeout to detect next frame
+//                            txFrameLock.wait(500);
+//                        } catch (InterruptedException ie) {
+//                            worker.interrupt();
+//                        }
+//                    }
                 }
             }
         });
-//        worker.setPriority(Thread.MAX_PRIORITY);
+        worker.setPriority(Thread.MAX_PRIORITY);
         worker.setDaemon(true);
         worker.start();
+    }
+
+    public void sendFlvTags() {
+        while (!mFlvTagCache.isEmpty()) {
+            SrsFlvFrame frame = mFlvTagCache.poll();
+            if (frame.isSequenceHeader()) {
+                if (frame.isVideo()) {
+                    mVideoSequenceHeader = frame;
+                    sendFlvTag(mVideoSequenceHeader);
+                } else if (frame.isAudio()) {
+                    mAudioSequenceHeader = frame;
+                    sendFlvTag(mAudioSequenceHeader);
+                }
+            } else {
+                if (frame.isVideo() && mVideoSequenceHeader != null) {
+                    sendFlvTag(frame);
+                } else if (frame.isAudio() && mAudioSequenceHeader != null) {
+                    sendFlvTag(frame);
+                }
+            }
+        }
     }
 
     /**
      * stop the muxer, disconnect RTMP connection.
      */
     public void stop() {
-        mFlvTagCache.clear();
         if (worker != null) {
             worker.interrupt();
             try {
@@ -200,7 +209,6 @@ public class SrsFlvMuxer {
             }
             worker = null;
         }
-        flv.reset();
         disconnect();
         needToFindKeyFrame = true;
         Log.i(TAG, "SrsFlvMuxer closed");
@@ -220,7 +228,7 @@ public class SrsFlvMuxer {
             if (bufferInfo.presentationTimeUs < 0) return;
 
             AtomicInteger videoFrameCacheNumber = getVideoFrameCacheNumber();
-            if (videoFrameCacheNumber != null && videoFrameCacheNumber.get() < SrsAvcEncoder.VGOP) {
+            if (videoFrameCacheNumber != null && videoFrameCacheNumber.get() < (3*SrsAvcEncoder.VGOP)) {
                 flv.writeVideoSample(byteBuf, bufferInfo);
             } else {
                 Log.w(TAG, "Network throughput too low");
