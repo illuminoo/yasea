@@ -46,7 +46,10 @@ public class SrsFlvMuxer {
     /**
      * Start presentation timestamp
      */
-    public long startPTS;
+    private long startPTS;
+    private long lastVideoPTS;
+    private long lastAudioPTS;
+    private long offset;
 
     /**
      * constructor.
@@ -110,6 +113,10 @@ public class SrsFlvMuxer {
 
     public boolean connect(String url) {
         startPTS = 0;
+        offset = 10;
+        if (url.contains("goeasy")) offset = 0; // Workaround for EasyLive
+        lastVideoPTS = 0;
+        lastAudioPTS = 0;
         needToFindKeyFrame = true;
 
         if (!connected) {
@@ -145,28 +152,43 @@ public class SrsFlvMuxer {
      * start to the remote server for remux.
      */
     public void start(final String rtmpUrl) {
-        startPTS = 0;
-        needToFindKeyFrame = true;
-
         worker = new Thread(new Runnable() {
             @Override
             public void run() {
+                Log.i(TAG, "SrsFlvMuxer started");
+
                 if (!connect(rtmpUrl)) {
+                    Log.e(TAG, "SrsFlvMuxer disconnected");
                     return;
                 }
+                Log.i(TAG, "SrsFlvMuxer connected");
 
-                while (!Thread.interrupted()) {
-                    sendFlvTags();
-//                    // Waiting for next frame
-//                    synchronized (txFrameLock) {
-//                        try {
-//                            // isEmpty() may take some time, so we set timeout to detect next frame
-//                            txFrameLock.wait(500);
-//                        } catch (InterruptedException ie) {
-//                            worker.interrupt();
-//                        }
-//                    }
+                while (worker!=null) {
+                    SrsFlvFrame frame = mFlvTagCache.poll();
+                    if (frame!=null) {
+                        if (frame.isSequenceHeader()) {
+                            if (frame.isVideo()) {
+                                mVideoSequenceHeader = frame;
+                                sendFlvTag(mVideoSequenceHeader);
+                            } else if (frame.isAudio()) {
+                                mAudioSequenceHeader = frame;
+                                sendFlvTag(mAudioSequenceHeader);
+                            }
+                        } else {
+                            if (frame.isVideo() && mVideoSequenceHeader != null) {
+                                sendFlvTag(frame);
+                            } else if (frame.isAudio() && mAudioSequenceHeader != null) {
+                                sendFlvTag(frame);
+                            }
+                        }
+                    } else {
+                        Thread.yield();
+                    }
                 }
+
+                disconnect();
+                needToFindKeyFrame = true;
+                Log.i(TAG, "SrsFlvMuxer stopped");
             }
         });
         worker.setPriority(Thread.MAX_PRIORITY);
@@ -174,9 +196,13 @@ public class SrsFlvMuxer {
         worker.start();
     }
 
+    /**
+     * Send all FLV tags from cache
+     */
     public void sendFlvTags() {
         while (!mFlvTagCache.isEmpty()) {
             SrsFlvFrame frame = mFlvTagCache.poll();
+//            if (frame==null) return;
             if (frame.isSequenceHeader()) {
                 if (frame.isVideo()) {
                     mVideoSequenceHeader = frame;
@@ -199,48 +225,45 @@ public class SrsFlvMuxer {
      * stop the muxer, disconnect RTMP connection.
      */
     public void stop() {
-        if (worker != null) {
-            worker.interrupt();
-            try {
-                worker.join(5000);
-            } catch (InterruptedException e) {
-                Log.e(TAG, e.getMessage(), e);
-                worker.interrupt();
-            }
-            worker = null;
-        }
-        disconnect();
-        needToFindKeyFrame = true;
-        Log.i(TAG, "SrsFlvMuxer closed");
+        worker = null;
     }
 
     /**
-     * send the annexb frame over RTMP.
+     * Mux video sample
      *
-     * @param trackIndex The track index for this sample.
      * @param byteBuf    The encoded sample.
      * @param bufferInfo The buffer information related to this sample.
      */
-    public void writeSampleData(int trackIndex, ByteBuffer byteBuf, MediaCodec.BufferInfo bufferInfo) {
-        if (VIDEO_TRACK == trackIndex) {
-            if (startPTS == 0) startPTS = bufferInfo.presentationTimeUs - 1000;
-            bufferInfo.presentationTimeUs -= startPTS;
-            if (bufferInfo.presentationTimeUs < 0) return;
+    public void writeVideoSample(ByteBuffer byteBuf, MediaCodec.BufferInfo bufferInfo) {
+        if (startPTS == 0) startPTS = bufferInfo.presentationTimeUs - offset;
+        bufferInfo.presentationTimeUs -= startPTS;
 
-            AtomicInteger videoFrameCacheNumber = getVideoFrameCacheNumber();
-            if (videoFrameCacheNumber != null && videoFrameCacheNumber.get() < (3*SrsAvcEncoder.VGOP)) {
-                flv.writeVideoSample(byteBuf, bufferInfo);
-            } else {
-                Log.w(TAG, "Network throughput too low");
-                needToFindKeyFrame = true;
-            }
+        if (bufferInfo.presentationTimeUs < lastVideoPTS) return;
+        lastVideoPTS = bufferInfo.presentationTimeUs;
+
+        AtomicInteger videoFrameCacheNumber = getVideoFrameCacheNumber();
+        if (videoFrameCacheNumber != null && videoFrameCacheNumber.get() < (5 * SrsAvcEncoder.VGOP)) {
+            flv.writeVideoSample(byteBuf, bufferInfo);
         } else {
-            if (startPTS == 0) return;
-            bufferInfo.presentationTimeUs -= startPTS;
-            if (bufferInfo.presentationTimeUs < 0) return;
-
-            flv.writeAudioSample(byteBuf, bufferInfo);
+            Log.w(TAG, "Network throughput too low");
+            needToFindKeyFrame = true;
         }
+    }
+
+    /**
+     * Mux audio sample
+     *
+     * @param byteBuf    The encoded sample.
+     * @param bufferInfo The buffer information related to this sample.
+     */
+    public void writeAudioSample(ByteBuffer byteBuf, MediaCodec.BufferInfo bufferInfo) {
+        if (startPTS == 0) return;
+        bufferInfo.presentationTimeUs -= startPTS;
+
+        if (bufferInfo.presentationTimeUs < lastAudioPTS) return;
+        lastAudioPTS = bufferInfo.presentationTimeUs;
+
+        flv.writeAudioSample(byteBuf, bufferInfo);
     }
 
     // E.4.3.1 VIDEODATA

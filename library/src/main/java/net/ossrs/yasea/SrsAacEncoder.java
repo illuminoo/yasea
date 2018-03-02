@@ -191,7 +191,7 @@ public class SrsAacEncoder extends MediaCodec.Callback {
     public void onOutputBufferAvailable(MediaCodec codec, int index, MediaCodec.BufferInfo info) {
         try {
             ByteBuffer bb = codec.getOutputBuffer(index);
-            muxer.writeSampleData(SrsFlvMuxer.AUDIO_TRACK, bb, info);
+            muxer.writeAudioSample(bb, info);
             codec.releaseOutputBuffer(index, false);
         } catch (IllegalStateException e) {
             // Ignore

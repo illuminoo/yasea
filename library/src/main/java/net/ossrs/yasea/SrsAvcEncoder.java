@@ -70,11 +70,11 @@ public class SrsAvcEncoder {
         setEncoderGop(VGOP);
 
         if (HD) {
-            vBitrate = 4800 * 1024;  // 3600 kbps
+            vBitrate = 4000 * 1024;  // 4000 kbps
             x264Preset = "veryfast";
         } else {
             vBitrate = 1200 * 1024;  // 1200 kbps
-            x264Preset = "superfast";
+            x264Preset = "veryfast";
         }
         setEncoderBitrate(vBitrate);
         setEncoderPreset(x264Preset);

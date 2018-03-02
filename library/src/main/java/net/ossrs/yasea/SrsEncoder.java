@@ -390,8 +390,8 @@ public class SrsEncoder {
 
 //            if (bi.presentationTimeUs>=lastVideoPTS) {
 
-                if (flvMuxer != null) flvMuxer.writeSampleData(videoFlvTrack, es, bi);
-                if (mp4Muxer != null) mp4Muxer.writeSampleData(videoMp4Track, es.duplicate(), bi);
+//                if (flvMuxer != null) flvMuxer.writeSampleData(videoFlvTrack, es, bi);
+//                if (mp4Muxer != null) mp4Muxer.writeSampleData(videoMp4Track, es.duplicate(), bi);
 
 //                lastVideoPTS = bi.presentationTimeUs;
 //            }
@@ -433,8 +433,8 @@ public class SrsEncoder {
      */
     private void muxAACFrame(ByteBuffer es, MediaCodec.BufferInfo bi) {
 //        if (bi.presentationTimeUs >= lastAudioPTS) {
-        if (flvMuxer != null) flvMuxer.writeSampleData(audioFlvTrack, es, bi);
-        if (mp4Muxer != null) mp4Muxer.writeSampleData(audioMp4Track, es.duplicate(), bi);
+//        if (flvMuxer != null) flvMuxer.writeSampleData(audioFlvTrack, es, bi);
+//        if (mp4Muxer != null) mp4Muxer.writeSampleData(audioMp4Track, es.duplicate(), bi);
 //            lastAudioPTS = bi.presentationTimeUs;
 //        }
     }
