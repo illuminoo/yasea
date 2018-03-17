@@ -18,6 +18,9 @@ import android.util.Log;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
+import static android.media.MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR;
+import static android.media.MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR;
+
 /**
  * Implements an Advanced Video Codec encoder (H264)
  */
@@ -70,11 +73,11 @@ public class SrsAvcEncoder {
         setEncoderGop(VGOP);
 
         if (HD) {
-            vBitrate = 4000 * 1024;  // 4000 kbps
+            vBitrate = 4800 * 1024;
             x264Preset = "veryfast";
         } else {
-            vBitrate = 1200 * 1024;  // 1200 kbps
-            x264Preset = "veryfast";
+            vBitrate = 1200 * 1024;
+            x264Preset = "superfast";
         }
         setEncoderBitrate(vBitrate);
         setEncoderPreset(x264Preset);
