@@ -1,7 +1,7 @@
 #!/bin/sh
 
 ANDROID_NDK=D:/Android/sdk/ndk-bundle
-SYSROOT=$ANDROID_NDK/platforms/android-19/arch-arm
+SYSROOT=$ANDROID_NDK/platforms/android-27/arch-arm
 CROSS_PREFIX=$ANDROID_NDK/toolchains/arm-linux-androideabi-4.9/prebuilt/windows-x86_64/bin/arm-linux-androideabi-
 EXTRA_CFLAGS="-march=armv7-a -mfloat-abi=softfp -mfpu=neon -D__ANDROID__ -D__ARM_ARCH_7__ -D__ARM_ARCH_7A__"
 EXTRA_LDFLAGS="-nostdlib"

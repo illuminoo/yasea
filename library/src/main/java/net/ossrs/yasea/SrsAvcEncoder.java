@@ -73,7 +73,7 @@ public class SrsAvcEncoder {
         setEncoderGop(VGOP);
 
         if (HD) {
-            vBitrate = 4800 * 1024;
+            vBitrate = 3600 * 1024;
             x264Preset = "veryfast";
         } else {
             vBitrate = 1200 * 1024;
@@ -86,7 +86,7 @@ public class SrsAvcEncoder {
         colorFormat = MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Planar;
         mediaFormat = MediaFormat.createVideoFormat(CODEC, outWidth, outHeight);
         mediaFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT, colorFormat);
-        mediaFormat.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 0);
+//        mediaFormat.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 0);
         mediaFormat.setInteger(MediaFormat.KEY_BIT_RATE, vBitrate);
         mediaFormat.setInteger(MediaFormat.KEY_FRAME_RATE, VFPS);
         mediaFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, VGOP / VFPS);
@@ -135,7 +135,7 @@ public class SrsAvcEncoder {
     }
 
     private void encodeYuvFrame(byte[] yuvFrame, long pts) {
-        int inBufferIndex = vencoder.dequeueInputBuffer(-1);
+        int inBufferIndex = vencoder.dequeueInputBuffer(0);
         if (inBufferIndex >= 0) {
             ByteBuffer bb = vencoder.getInputBuffer(inBufferIndex);
             bb.put(yuvFrame, 0, yuvFrame.length);

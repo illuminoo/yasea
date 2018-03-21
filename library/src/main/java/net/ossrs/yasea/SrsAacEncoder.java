@@ -159,7 +159,7 @@ public class SrsAacEncoder extends MediaCodec.Callback {
     }
 
     public void captureAudio() {
-        int inBufferIndex = aencoder.dequeueInputBuffer(-1);
+        int inBufferIndex = aencoder.dequeueInputBuffer(0);
         if (inBufferIndex >= 0) {
             onInputBufferAvailable(aencoder, inBufferIndex);
         }
