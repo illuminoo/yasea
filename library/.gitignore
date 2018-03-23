@@ -1,0 +1,7 @@
+*.iml
+.gradle
+.idea
+.externalNativeBuild
+
+build
+target
