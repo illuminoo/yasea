@@ -7,6 +7,7 @@
 package net.ossrs.yasea;
 
 import android.graphics.Bitmap;
+import android.graphics.Color;
 import android.graphics.Rect;
 import android.media.Image;
 import android.media.MediaCodec;
@@ -215,6 +216,7 @@ public class SrsAvcEncoder {
     }
 
     public Bitmap getOverlay() {
+        overlay.eraseColor(Color.TRANSPARENT);
         return overlay;
     }
 
