@@ -137,7 +137,7 @@ public class SrsFlvMuxer {
 
         if (frame.isVideo()) {
             if (frame.isKeyFrame()) {
-                Log.i(TAG, String.format("worker: send frame type=%d, dts=%d, size=%dB",
+                Log.d(TAG, String.format("worker: send frame type=%d, dts=%d, size=%dB",
                         frame.type, frame.dts, frame.flvTag.array().length));
             }
             publisher.publishVideoData(frame.flvTag.array(), frame.flvTag.size(), frame.dts);
@@ -163,35 +163,25 @@ public class SrsFlvMuxer {
                 }
                 Log.i(TAG, "SrsFlvMuxer connected");
 
-                while (worker!=null) {
-                    SrsFlvFrame frame = mFlvTagCache.poll();
-                    if (frame!=null) {
-                        if (frame.isSequenceHeader()) {
-                            if (frame.isVideo()) {
-                                mVideoSequenceHeader = frame;
-                                sendFlvTag(mVideoSequenceHeader);
-                            } else if (frame.isAudio()) {
-                                mAudioSequenceHeader = frame;
-                                sendFlvTag(mAudioSequenceHeader);
-                            }
-                        } else {
-                            if (frame.isVideo() && mVideoSequenceHeader != null) {
-                                sendFlvTag(frame);
-                            } else if (frame.isAudio() && mAudioSequenceHeader != null) {
-                                sendFlvTag(frame);
-                            }
+                while (worker != null) {
+                    sendFlvTags();
+
+                    // Waiting for next frame
+                    synchronized (txFrameLock) {
+                        try {
+                            // isEmpty() may take some time, so we set timeout to detect next frame
+                            txFrameLock.wait(500);
+                        } catch (InterruptedException ie) {
+                            worker = null;
                         }
-                    } else {
-                        Thread.yield();
                     }
                 }
 
                 disconnect();
-                needToFindKeyFrame = true;
                 Log.i(TAG, "SrsFlvMuxer stopped");
             }
         });
-        worker.setPriority(Thread.MAX_PRIORITY);
+        worker.setPriority(7);
         worker.setDaemon(true);
         worker.start();
     }
@@ -200,7 +190,7 @@ public class SrsFlvMuxer {
      * Send all FLV tags from cache
      */
     public void sendFlvTags() {
-        while (!mFlvTagCache.isEmpty()) {
+        if (!mFlvTagCache.isEmpty()) {
             SrsFlvFrame frame = mFlvTagCache.poll();
 //            if (frame==null) return;
             if (frame.isSequenceHeader()) {
@@ -242,7 +232,7 @@ public class SrsFlvMuxer {
         lastVideoPTS = bufferInfo.presentationTimeUs;
 
         AtomicInteger videoFrameCacheNumber = getVideoFrameCacheNumber();
-        if (videoFrameCacheNumber != null && videoFrameCacheNumber.get() < (5 * SrsAvcEncoder.VGOP)) {
+        if (videoFrameCacheNumber != null && videoFrameCacheNumber.get() < SrsAvcEncoder.VGOP) {
             flv.writeVideoSample(byteBuf, bufferInfo);
         } else {
             Log.w(TAG, "Network throughput too low");
@@ -257,7 +247,7 @@ public class SrsFlvMuxer {
      * @param bufferInfo The buffer information related to this sample.
      */
     public void writeAudioSample(ByteBuffer byteBuf, MediaCodec.BufferInfo bufferInfo) {
-        if (startPTS == 0) return;
+        if (startPTS == 0) startPTS = bufferInfo.presentationTimeUs - offset;
         bufferInfo.presentationTimeUs -= startPTS;
 
         if (bufferInfo.presentationTimeUs < lastAudioPTS) return;
@@ -383,13 +373,12 @@ public class SrsFlvMuxer {
      * 3 = 44 kHz = 44100 Hz
      */
     private class SrsCodecAudioSampleRate {
-        // set to the max value to reserved, for array map.
-        public final static int Reserved = 4;
-
-        public final static int R5512 = 0;
-        public final static int R11025 = 1;
-        public final static int R22050 = 2;
-        public final static int R44100 = 3;
+        public final static int R5512 = 5512;
+        public final static int R11025 = 11025;
+        public final static int R22050 = 22050;
+        public final static int R44100 = 44100;
+        public final static int R32000 = 32000;
+        public final static int R16000 = 16000;
     }
 
     /**
@@ -896,7 +885,7 @@ public class SrsFlvMuxer {
                 // 5bits, 7.3.1 NAL unit syntax,
                 // H.264-AVC-ISO_IEC_14496-10.pdf, page 44.
                 // 7: SPS, 8: PPS, 5: I Frame, 1: P Frame
-                int nal_unit_type = (int) (frame.data.get(0) & 0x1f);
+                int nal_unit_type = frame.data.get(0) & 0x1f;
                 if (nal_unit_type == SrsAvcNaluType.SPS || nal_unit_type == SrsAvcNaluType.PPS) {
                     Log.i(TAG, String.format("annexb demux %dB, pts=%d, frame=%dB, nalu=%d",
                             bi.size, pts, frame.size, nal_unit_type));

@@ -1,14 +1,20 @@
+/*
+ * Copyright (c) 2018 Illuminoo Projects BV.
+ * This file is part of LISA and subject to the to the terms and conditions defined in file 'LICENSE',
+ * which is part of this source code package.
+ */
+
 package com.seu.magicfilter.base;
 
 
-import java.nio.FloatBuffer;
-import java.util.List;
+import android.content.Context;
+import android.opengl.GLES20;
 
 import com.seu.magicfilter.base.gpuimage.GPUImageFilter;
 import com.seu.magicfilter.utils.OpenGLUtils;
 
-import android.content.Context;
-import android.opengl.GLES20;
+import java.nio.FloatBuffer;
+import java.util.List;
 
 
 public class MagicBaseGroupFilter extends GPUImageFilter {

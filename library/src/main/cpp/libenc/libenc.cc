@@ -490,6 +490,8 @@ libenc_ARGBToOverlay(JNIEnv *env, jobject thiz, jintArray frame, jint src_width,
     } else {
         useOverlay = true;
     }
+
+    env->ReleaseIntArrayElements(frame, argb_frame, JNI_ABORT);
 }
 
 // For COLOR_FormatYUV420SemiPlanar

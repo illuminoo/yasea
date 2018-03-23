@@ -1,7 +1,10 @@
-package com.seu.magicfilter.advanced;
+/*
+ * Copyright (c) 2018 Illuminoo Projects BV.
+ * This file is part of LISA and subject to the to the terms and conditions defined in file 'LICENSE',
+ * which is part of this source code package.
+ */
 
-import java.util.ArrayList;
-import java.util.List;
+package com.seu.magicfilter.advanced;
 
 import com.seu.magicfilter.base.MagicBaseGroupFilter;
 import com.seu.magicfilter.base.gpuimage.GPUImageBrightnessFilter;
@@ -11,6 +14,9 @@ import com.seu.magicfilter.base.gpuimage.GPUImageFilter;
 import com.seu.magicfilter.base.gpuimage.GPUImageHueFilter;
 import com.seu.magicfilter.base.gpuimage.GPUImageSaturationFilter;
 import com.seu.magicfilter.base.gpuimage.GPUImageSharpenFilter;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class MagicImageAdjustFilter extends MagicBaseGroupFilter{
     

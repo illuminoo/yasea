@@ -1,12 +1,10 @@
+/*
+ * Copyright (c) 2018 Illuminoo Projects BV.
+ * This file is part of LISA and subject to the to the terms and conditions defined in file 'LICENSE',
+ * which is part of this source code package.
+ */
+
 package com.seu.magicfilter.utils;
-
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.nio.Buffer;
-
-import javax.microedition.khronos.opengles.GL10;
 
 import android.content.Context;
 import android.content.res.AssetManager;
@@ -16,6 +14,14 @@ import android.opengl.GLES11Ext;
 import android.opengl.GLES20;
 import android.opengl.GLUtils;
 import android.util.Log;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.Buffer;
+
+import javax.microedition.khronos.opengles.GL10;
 
 public class OpenGLUtils {
     public static final int NO_TEXTURE = -1;

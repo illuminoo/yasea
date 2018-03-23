@@ -18,9 +18,6 @@ import android.util.Log;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
-import static android.media.MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR;
-import static android.media.MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR;
-
 /**
  * Implements an Advanced Video Codec encoder (H264)
  */
@@ -36,10 +33,11 @@ public class SrsAvcEncoder {
     public final int outHeight;
     public final int vBitrate;
 
-    public final MediaFormat mediaFormat;
+    public MediaFormat mediaFormat;
     private final MediaCodec.BufferInfo vebi = new MediaCodec.BufferInfo();
     private final int colorFormat;
     private final String codecName;
+    private MediaCodec vencoder;
 
     private final int inWidth;
     private final int inHeight;
@@ -52,8 +50,17 @@ public class SrsAvcEncoder {
     private final byte[] v_frame;
     private final int[] argb_frame;
 
-    private MediaCodec vencoder;
+    private final Bitmap overlay;
 
+    /**
+     * Implements an AVC encoder
+     *
+     * @param inWidth
+     * @param inHeight
+     * @param outWidth
+     * @param outHeight
+     * @param HD
+     */
     public SrsAvcEncoder(int inWidth, int inHeight, int outWidth, int outHeight, boolean HD) {
 
         // Prepare input
@@ -62,6 +69,9 @@ public class SrsAvcEncoder {
         y_frame = new byte[inWidth * inHeight];
         u_frame = new byte[(inWidth * inHeight) / 2 - 1];
         v_frame = new byte[(inWidth * inHeight) / 2 - 1];
+
+        // Prepare video overlay
+        overlay = Bitmap.createBitmap(outWidth, outHeight, Bitmap.Config.ARGB_8888);
 
         // Prepare output
         this.outWidth = outWidth;
@@ -204,13 +214,17 @@ public class SrsAvcEncoder {
                 cropArea.left, cropArea.top, cropArea.width(), cropArea.height());
     }
 
-    public void setOverlay(Bitmap overlay) {
-        if (overlay == null) {
-            ARGBToOverlay(null, outWidth, outHeight, false, 0);
-        } else {
-            overlay.getPixels(argb_frame, 0, outWidth, 0, 0, outWidth, outHeight);
-            ARGBToOverlay(argb_frame, outWidth, outHeight, false, 0);
-        }
+    public Bitmap getOverlay() {
+        return overlay;
+    }
+
+    public void clearOverlay() {
+        ARGBToOverlay(null, outWidth, outHeight, false, 0);
+    }
+
+    public void updateOverlay() {
+        overlay.getPixels(argb_frame, 0, outWidth, 0, 0, outWidth, outHeight);
+        ARGBToOverlay(argb_frame, outWidth, outHeight, false, 0);
     }
 
     public byte[] ARGBtoYUV(int[] data, int width, int height, Rect boundingBox) {

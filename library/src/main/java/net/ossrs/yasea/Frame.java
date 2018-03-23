@@ -5,9 +5,7 @@
  */
 package net.ossrs.yasea;
 
-import java.io.Serializable;
-
-public class Frame implements Serializable {
+public class Frame {
 
     /**
      * Key frame

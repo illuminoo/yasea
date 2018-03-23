@@ -1,12 +1,18 @@
+/*
+ * Copyright (c) 2018 Illuminoo Projects BV.
+ * This file is part of LISA and subject to the to the terms and conditions defined in file 'LICENSE',
+ * which is part of this source code package.
+ */
+
 package com.seu.magicfilter.advanced;
 
 import android.opengl.GLES20;
 
-import com.seu.magicfilter.utils.MagicFilterType;
-import net.ossrs.yasea.R;
-
 import com.seu.magicfilter.base.gpuimage.GPUImageFilter;
+import com.seu.magicfilter.utils.MagicFilterType;
 import com.seu.magicfilter.utils.OpenGLUtils;
+
+import net.ossrs.yasea.R;
 
 public class MagicXproIIFilter extends GPUImageFilter{
     private int[] inputTextureHandles = {-1,-1};

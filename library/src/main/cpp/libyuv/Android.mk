@@ -1,4 +1,4 @@
-# This is the Android makefile for libyuv for both platform and NDK.
+# This is the Android makefile for libyuv for NDK.
 LOCAL_PATH:= $(call my-dir)
 
 include $(CLEAR_VARS)
@@ -45,7 +45,7 @@ ifeq ($(TARGET_ARCH_ABI),arm64-v8a)
         source/compare_neon64.cc    \
         source/rotate_neon64.cc     \
         source/row_neon64.cc        \
-        source/scale_neon64.cc 
+        source/scale_neon64.cc
 endif
 
 ifeq ($(TARGET_ARCH_ABI),$(filter $(TARGET_ARCH_ABI), x86 x86_64))
@@ -63,10 +63,12 @@ ifeq ($(TARGET_ARCH_ABI),$(filter $(TARGET_ARCH_ABI), mips mips_64))
         source/scale_mips.cc
 endif
 
+common_CFLAGS := -Wall -fexceptions
+LOCAL_CFLAGS += $(common_CFLAGS)
+
 LOCAL_EXPORT_C_INCLUDES := $(LOCAL_PATH)/include
 LOCAL_C_INCLUDES += $(LOCAL_PATH)/include
 LOCAL_EXPORT_LDLIBS := -llog
 LOCAL_MODULE := libyuv
 
 include $(BUILD_SHARED_LIBRARY)
-#include $(BUILD_STATIC_LIBRARY)

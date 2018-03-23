@@ -1,13 +1,19 @@
-package com.seu.magicfilter.advanced;
+/*
+ * Copyright (c) 2018 Illuminoo Projects BV.
+ * This file is part of LISA and subject to the to the terms and conditions defined in file 'LICENSE',
+ * which is part of this source code package.
+ */
 
-import java.nio.ByteBuffer;
+package com.seu.magicfilter.advanced;
 
 import android.opengl.GLES20;
 
+import com.seu.magicfilter.base.gpuimage.GPUImageFilter;
 import com.seu.magicfilter.utils.MagicFilterType;
+
 import net.ossrs.yasea.R;
 
-import com.seu.magicfilter.base.gpuimage.GPUImageFilter;
+import java.nio.ByteBuffer;
 
 public class MagicWhiteCatFilter extends GPUImageFilter{
 

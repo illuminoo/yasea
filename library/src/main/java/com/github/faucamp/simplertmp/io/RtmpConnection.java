@@ -1,21 +1,5 @@
 package com.github.faucamp.simplertmp.io;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
-import java.io.EOFException;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.net.InetSocketAddress;
-import java.net.Socket;
-import java.net.SocketAddress;
-import java.net.SocketException;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.concurrent.atomic.AtomicInteger;
-
 import android.util.Log;
 
 import com.github.faucamp.simplertmp.RtmpHandler;
@@ -26,15 +10,31 @@ import com.github.faucamp.simplertmp.amf.AmfNumber;
 import com.github.faucamp.simplertmp.amf.AmfObject;
 import com.github.faucamp.simplertmp.amf.AmfString;
 import com.github.faucamp.simplertmp.packets.Abort;
+import com.github.faucamp.simplertmp.packets.Audio;
+import com.github.faucamp.simplertmp.packets.Command;
 import com.github.faucamp.simplertmp.packets.Data;
 import com.github.faucamp.simplertmp.packets.Handshake;
-import com.github.faucamp.simplertmp.packets.Command;
-import com.github.faucamp.simplertmp.packets.Audio;
-import com.github.faucamp.simplertmp.packets.SetPeerBandwidth;
-import com.github.faucamp.simplertmp.packets.Video;
-import com.github.faucamp.simplertmp.packets.UserControl;
 import com.github.faucamp.simplertmp.packets.RtmpPacket;
+import com.github.faucamp.simplertmp.packets.SetPeerBandwidth;
+import com.github.faucamp.simplertmp.packets.UserControl;
+import com.github.faucamp.simplertmp.packets.Video;
 import com.github.faucamp.simplertmp.packets.WindowAckSize;
+
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
+import java.io.EOFException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.InetSocketAddress;
+import java.net.Socket;
+import java.net.SocketAddress;
+import java.net.SocketException;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Main RTMP connection implementation class
@@ -457,7 +457,7 @@ public class RtmpConnection implements RtmpPublisher {
             videoLastTimeMillis = System.nanoTime() / 1000000;
             videoFrameCount++;
         } else {
-            if (++videoFrameCount >= 48) {
+            if (++videoFrameCount >= 60) {
                 long diffTimeMillis = System.nanoTime() / 1000000 - videoLastTimeMillis;
                 mHandler.notifyRtmpVideoFpsChanged((double) videoFrameCount * 1000 / diffTimeMillis);
                 mHandler.notifyRtmpVideoBitrateChanged((double) videoDataLength * 8 * 1000 / diffTimeMillis);
@@ -473,7 +473,7 @@ public class RtmpConnection implements RtmpPublisher {
             audioLastTimeMillis = System.nanoTime() / 1000000;
             audioFrameCount++;
         } else {
-            if (++audioFrameCount >= 48) {
+            if (++audioFrameCount >= 60) {
                 long diffTimeMillis = System.nanoTime() / 1000000 - audioLastTimeMillis;
                 mHandler.notifyRtmpAudioBitrateChanged((double) audioDataLength * 8 * 1000 / diffTimeMillis);
                 audioFrameCount = 0;
@@ -563,7 +563,7 @@ public class RtmpConnection implements RtmpPublisher {
                             handleRxInvoke((Command) rtmpPacket);
                             break;
                         default:
-                            Log.w(TAG, "handleRxPacketLoop(): Not handling unimplemented/unknown packet of type: " + rtmpPacket.getHeader().getMessageType());
+                            Log.d(TAG, "handleRxPacketLoop(): Not handling unimplemented/unknown packet of type: " + rtmpPacket.getHeader().getMessageType());
                             break;
                     }
                 }
