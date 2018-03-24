@@ -181,7 +181,7 @@ public class SrsFlvMuxer {
                 Log.i(TAG, "SrsFlvMuxer stopped");
             }
         });
-        worker.setPriority(7);
+        worker.setPriority(Thread.MAX_PRIORITY);
         worker.setDaemon(true);
         worker.start();
     }
@@ -190,7 +190,7 @@ public class SrsFlvMuxer {
      * Send all FLV tags from cache
      */
     public void sendFlvTags() {
-        if (!mFlvTagCache.isEmpty()) {
+        while (!mFlvTagCache.isEmpty()) {
             SrsFlvFrame frame = mFlvTagCache.poll();
 //            if (frame==null) return;
             if (frame.isSequenceHeader()) {
@@ -236,7 +236,6 @@ public class SrsFlvMuxer {
             flv.writeVideoSample(byteBuf, bufferInfo);
         } else {
             Log.w(TAG, "Network throughput too low");
-            needToFindKeyFrame = true;
         }
     }
 

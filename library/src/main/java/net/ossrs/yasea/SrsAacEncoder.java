@@ -14,6 +14,8 @@ import android.media.MediaFormat;
 import android.media.MediaRecorder;
 import android.media.audiofx.AcousticEchoCanceler;
 import android.media.audiofx.AutomaticGainControl;
+import android.os.Handler;
+import android.os.HandlerThread;
 import android.util.Log;
 
 import java.io.IOException;
@@ -53,6 +55,11 @@ public class SrsAacEncoder extends MediaCodec.Callback {
      * Gain controller
      */
     private AutomaticGainControl agc;
+
+    /**
+     * Background thread for audio
+     */
+    private HandlerThread audioThread;
 
     /**
      * Constructor
@@ -96,8 +103,12 @@ public class SrsAacEncoder extends MediaCodec.Callback {
             // Start Audio encoder
             aencoder = MediaCodec.createByCodecName(codecName);
             aencoder.configure(mediaFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
-            aencoder.setCallback(this);
+            audioThread = new HandlerThread("Audio");
+            audioThread.start();
+            aencoder.setCallback(this, new Handler(audioThread.getLooper()));
             aencoder.start();
+
+            Log.i(TAG, "Started");
 
             return true;
         } catch (IOException e) {
@@ -113,6 +124,12 @@ public class SrsAacEncoder extends MediaCodec.Callback {
             aencoder.stop();
             aencoder.release();
             aencoder = null;
+        }
+
+        if (audioThread!=null) {
+            Log.i(TAG, "stop background thread");
+            audioThread.quitSafely();
+            audioThread = null;
         }
 
         if (mic != null) {
