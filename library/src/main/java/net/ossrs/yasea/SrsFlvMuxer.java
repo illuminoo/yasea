@@ -190,9 +190,9 @@ public class SrsFlvMuxer {
      * Send all FLV tags from cache
      */
     public void sendFlvTags() {
-        while (!mFlvTagCache.isEmpty()) {
+//        if (!mFlvTagCache.isEmpty()) {
             SrsFlvFrame frame = mFlvTagCache.poll();
-//            if (frame==null) return;
+            if (frame==null) return;
             if (frame.isSequenceHeader()) {
                 if (frame.isVideo()) {
                     mVideoSequenceHeader = frame;
@@ -208,7 +208,7 @@ public class SrsFlvMuxer {
                     sendFlvTag(frame);
                 }
             }
-        }
+//        }
     }
 
     /**
