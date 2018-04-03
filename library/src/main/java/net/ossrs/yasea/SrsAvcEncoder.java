@@ -7,6 +7,7 @@
 package net.ossrs.yasea;
 
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Rect;
 import android.media.Image;
@@ -51,7 +52,8 @@ public class SrsAvcEncoder {
     private final byte[] v_frame;
     private final int[] argb_frame;
 
-    private final Bitmap overlay;
+    private final Bitmap overlayBitmap;
+    private final Canvas overlay;
 
     /**
      * Implements an AVC encoder
@@ -72,7 +74,8 @@ public class SrsAvcEncoder {
         v_frame = new byte[(inWidth * inHeight) / 2 - 1];
 
         // Prepare video overlay
-        overlay = Bitmap.createBitmap(outWidth, outHeight, Bitmap.Config.ARGB_8888);
+        overlayBitmap = Bitmap.createBitmap(outWidth, outHeight, Bitmap.Config.ARGB_8888);
+        overlay = new Canvas(overlayBitmap);
 
         // Prepare output
         this.outWidth = outWidth;
@@ -215,8 +218,8 @@ public class SrsAvcEncoder {
                 cropArea.left, cropArea.top, cropArea.width(), cropArea.height());
     }
 
-    public Bitmap getOverlay() {
-        overlay.eraseColor(Color.TRANSPARENT);
+    public Canvas getOverlay() {
+        overlayBitmap.eraseColor(Color.TRANSPARENT);
         return overlay;
     }
 
@@ -225,7 +228,7 @@ public class SrsAvcEncoder {
     }
 
     public void updateOverlay() {
-        overlay.getPixels(argb_frame, 0, outWidth, 0, 0, outWidth, outHeight);
+        overlayBitmap.getPixels(argb_frame, 0, outWidth, 0, 0, outWidth, outHeight);
         ARGBToOverlay(argb_frame, outWidth, outHeight, false, 0);
     }
 
