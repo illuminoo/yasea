@@ -253,6 +253,27 @@ YUV420_888toI420(uint8_t *src_y, uint8_t *src_u, uint8_t *src_v, jint src_width,
         return false;
     }
 
+    if (useOverlay) {
+        ret = I420Blend(i420_overlay_frame.y, i420_overlay_frame.width,
+                        i420_overlay_frame.u, i420_overlay_frame.width / 2,
+                        i420_overlay_frame.v, i420_overlay_frame.width / 2,
+                        i420_scaled_frame.y, i420_scaled_frame.width,
+                        i420_scaled_frame.u, i420_scaled_frame.width / 2,
+                        i420_scaled_frame.v, i420_scaled_frame.width / 2,
+                        i420_overlay_frame.alpha, i420_overlay_frame.width,
+                        i420_scaled_frame.y, i420_scaled_frame.width,
+                        i420_scaled_frame.u, i420_scaled_frame.width / 2,
+                        i420_scaled_frame.v, i420_scaled_frame.width / 2,
+                        i420_scaled_frame.width,
+                        i420_scaled_frame.height
+        );
+
+        if (ret < 0) {
+            LIBENC_LOGE("I420Blend failure");
+            return false;
+        }
+    }
+
     return true;
 }
 
@@ -416,38 +437,24 @@ libenc_YUV420_888toI420(JNIEnv *env, jobject thiz, jbyteArray y_frame, jbyteArra
     jbyte *u_framed = env->GetByteArrayElements(u_frame, NULL);
     jbyte *v_framed = env->GetByteArrayElements(v_frame, NULL);
 
-    if (!YUV420_888toI420((uint8_t *) y_framed, (uint8_t *) u_framed, (uint8_t *) v_framed,
-                          src_width,
-                          src_height,
-                          crop_x, crop_y, crop_width, crop_height,
-                          need_flip, rotate_degree)) {
-        return NULL;
+    jbyteArray i420Frame = NULL;
+
+    if (YUV420_888toI420((uint8_t *) y_framed,
+                         (uint8_t *) u_framed,
+                         (uint8_t *) v_framed,
+                         src_width,
+                         src_height,
+                         crop_x,
+                         crop_y,
+                         crop_width,
+                         crop_height,
+                         need_flip,
+                         rotate_degree)) {
+
+        int y_size = i420_scaled_frame.width * i420_scaled_frame.height;
+        i420Frame = env->NewByteArray(y_size * 3 / 2);
+        env->SetByteArrayRegion(i420Frame, 0, y_size * 3 / 2, (jbyte *) i420_scaled_frame.data);
     }
-
-    if (useOverlay) {
-        int ret = I420Blend(i420_overlay_frame.y, i420_overlay_frame.width,
-                            i420_overlay_frame.u, i420_overlay_frame.width / 2,
-                            i420_overlay_frame.v, i420_overlay_frame.width / 2,
-                            i420_scaled_frame.y, i420_scaled_frame.width,
-                            i420_scaled_frame.u, i420_scaled_frame.width / 2,
-                            i420_scaled_frame.v, i420_scaled_frame.width / 2,
-                            i420_overlay_frame.alpha, i420_overlay_frame.width,
-                            i420_scaled_frame.y, i420_scaled_frame.width,
-                            i420_scaled_frame.u, i420_scaled_frame.width / 2,
-                            i420_scaled_frame.v, i420_scaled_frame.width / 2,
-                            i420_scaled_frame.width,
-                            i420_scaled_frame.height
-        );
-
-        if (ret < 0) {
-            LIBENC_LOGE("I420Blend failure");
-            return NULL;
-        }
-    }
-
-    int y_size = i420_scaled_frame.width * i420_scaled_frame.height;
-    jbyteArray i420Frame = env->NewByteArray(y_size * 3 / 2);
-    env->SetByteArrayRegion(i420Frame, 0, y_size * 3 / 2, (jbyte *) i420_scaled_frame.data);
 
     env->ReleaseByteArrayElements(y_frame, y_framed, JNI_ABORT);
     env->ReleaseByteArrayElements(u_frame, u_framed, JNI_ABORT);
@@ -461,7 +468,7 @@ static void
 libenc_ARGBToOverlay(JNIEnv *env, jobject thiz, jintArray frame, jint src_width,
                      jint src_height, jboolean need_flip, jint rotate_degree) {
 
-    if (frame==NULL) {
+    if (frame == NULL) {
         useOverlay = false;
         return;
     }
@@ -499,7 +506,8 @@ static jbyteArray libenc_RGBAToNV12(JNIEnv *env, jobject thiz, jbyteArray frame,
                                     jint src_height, jboolean need_flip, jint rotate_degree) {
     jbyte *rgba_frame = env->GetByteArrayElements(frame, NULL);
 
-    if (!convert_to_i420((uint8_t *) rgba_frame, src_width, src_height, 0, 0, src_width, src_height,
+    if (!convert_to_i420((uint8_t *) rgba_frame, src_width, src_height, 0, 0, src_width,
+                         src_height,
                          need_flip,
                          rotate_degree,
                          FOURCC_RGBA)) {

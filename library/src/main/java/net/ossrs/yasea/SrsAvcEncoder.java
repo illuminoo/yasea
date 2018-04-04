@@ -100,7 +100,7 @@ public class SrsAvcEncoder {
         colorFormat = MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Planar;
         mediaFormat = MediaFormat.createVideoFormat(CODEC, outWidth, outHeight);
         mediaFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT, colorFormat);
-//        mediaFormat.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 0);
+        mediaFormat.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 0);
         mediaFormat.setInteger(MediaFormat.KEY_BIT_RATE, vBitrate);
         mediaFormat.setInteger(MediaFormat.KEY_FRAME_RATE, VFPS);
         mediaFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, VGOP / VFPS);
@@ -209,7 +209,7 @@ public class SrsAvcEncoder {
         }
     }
 
-    public byte[] YUV420_888toYUV(Image image, Rect cropArea) {
+    synchronized public byte[] YUV420_888toYUV(Image image, Rect cropArea) {
         Image.Plane[] planes = image.getPlanes();
         planes[0].getBuffer().get(y_frame);
         planes[1].getBuffer().get(u_frame);
@@ -223,11 +223,11 @@ public class SrsAvcEncoder {
         return overlay;
     }
 
-    public void clearOverlay() {
+    synchronized public void clearOverlay() {
         ARGBToOverlay(null, outWidth, outHeight, false, 0);
     }
 
-    public void updateOverlay() {
+    synchronized public void updateOverlay() {
         overlayBitmap.getPixels(argb_frame, 0, outWidth, 0, 0, outWidth, outHeight);
         ARGBToOverlay(argb_frame, outWidth, outHeight, false, 0);
     }
