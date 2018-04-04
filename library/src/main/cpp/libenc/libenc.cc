@@ -437,7 +437,7 @@ libenc_YUV420_888toI420(JNIEnv *env, jobject thiz, jbyteArray y_frame, jbyteArra
     jbyte *u_framed = env->GetByteArrayElements(u_frame, NULL);
     jbyte *v_framed = env->GetByteArrayElements(v_frame, NULL);
 
-    jbyteArray i420Frame = NULL;
+    jbyteArray i420Frame = env->NewByteArray(0);
 
     if (YUV420_888toI420((uint8_t *) y_framed,
                          (uint8_t *) u_framed,

@@ -87,7 +87,7 @@ public class SrsAvcEncoder {
         setEncoderGop(VGOP);
 
         if (HD) {
-            vBitrate = 3600 * 1024;
+            vBitrate = 4800 * 1024;
             x264Preset = "veryfast";
         } else {
             vBitrate = 1200 * 1024;
@@ -145,6 +145,7 @@ public class SrsAvcEncoder {
     }
 
     public void encodeYuvFrame(byte[] frame) {
+        if (frame.length==0) return;
         encodeYuvFrame(frame, System.nanoTime() / 1000);
     }
 
@@ -209,7 +210,7 @@ public class SrsAvcEncoder {
         }
     }
 
-    synchronized public byte[] YUV420_888toYUV(Image image, Rect cropArea) {
+    public byte[] YUV420_888toYUV(Image image, Rect cropArea) {
         Image.Plane[] planes = image.getPlanes();
         planes[0].getBuffer().get(y_frame);
         planes[1].getBuffer().get(u_frame);
@@ -223,11 +224,11 @@ public class SrsAvcEncoder {
         return overlay;
     }
 
-    synchronized public void clearOverlay() {
+    public void clearOverlay() {
         ARGBToOverlay(null, outWidth, outHeight, false, 0);
     }
 
-    synchronized public void updateOverlay() {
+    public void updateOverlay() {
         overlayBitmap.getPixels(argb_frame, 0, outWidth, 0, 0, outWidth, outHeight);
         ARGBToOverlay(argb_frame, outWidth, outHeight, false, 0);
     }
