@@ -54,11 +54,12 @@ static const int DST_COLOR_FMT = FOURCC_NV12;
 
 static struct YuvFrame i420_rotated_frame;
 static struct YuvFrame i420_scaled_frame;
-static struct YuvFrame i420_overlay_frame;
+static struct YuvFrame i420_overlay_frame_a;
+static struct YuvFrame i420_overlay_frame_b;
 static struct YuvFrame nv12_frame;
 static struct YuvFrame i420_src_frame;
 
-static bool useOverlay = false;
+static struct YuvFrame* overlay = NULL;
 
 /**
  * Convert frames to I420
@@ -253,14 +254,14 @@ YUV420_888toI420(uint8_t *src_y, uint8_t *src_u, uint8_t *src_v, jint src_width,
         return false;
     }
 
-    if (useOverlay) {
-        ret = I420Blend(i420_overlay_frame.y, i420_overlay_frame.width,
-                        i420_overlay_frame.u, i420_overlay_frame.width / 2,
-                        i420_overlay_frame.v, i420_overlay_frame.width / 2,
+    if (overlay!=NULL) {
+        ret = I420Blend(overlay->y, overlay->width,
+                        overlay->u, overlay->width / 2,
+                        overlay->v, overlay->width / 2,
                         i420_scaled_frame.y, i420_scaled_frame.width,
                         i420_scaled_frame.u, i420_scaled_frame.width / 2,
                         i420_scaled_frame.v, i420_scaled_frame.width / 2,
-                        i420_overlay_frame.alpha, i420_overlay_frame.width,
+                        overlay->alpha, overlay->width,
                         i420_scaled_frame.y, i420_scaled_frame.width,
                         i420_scaled_frame.u, i420_scaled_frame.width / 2,
                         i420_scaled_frame.v, i420_scaled_frame.width / 2,
@@ -309,15 +310,26 @@ libenc_setEncoderResolution(JNIEnv *env, jobject thiz, jint out_width, jint out_
         i420_scaled_frame.v = i420_scaled_frame.u + y_size / 4;
     }
 
-    if (i420_overlay_frame.width != out_width || i420_overlay_frame.height != out_height) {
-        free(i420_overlay_frame.data);
-        i420_overlay_frame.width = out_width;
-        i420_overlay_frame.height = out_height;
-        i420_overlay_frame.data = (uint8_t *) malloc(y_size * 3 / 2);
-        i420_overlay_frame.y = i420_overlay_frame.data;
-        i420_overlay_frame.u = i420_overlay_frame.y + y_size;
-        i420_overlay_frame.v = i420_overlay_frame.u + y_size / 4;
-        i420_overlay_frame.alpha = (uint8_t *) malloc(y_size);
+    if (i420_overlay_frame_a.width != out_width || i420_overlay_frame_a.height != out_height) {
+        free(i420_overlay_frame_a.data);
+        i420_overlay_frame_a.width = out_width;
+        i420_overlay_frame_a.height = out_height;
+        i420_overlay_frame_a.data = (uint8_t *) malloc(y_size * 3 / 2);
+        i420_overlay_frame_a.y = i420_overlay_frame_a.data;
+        i420_overlay_frame_a.u = i420_overlay_frame_a.y + y_size;
+        i420_overlay_frame_a.v = i420_overlay_frame_a.u + y_size / 4;
+        i420_overlay_frame_a.alpha = (uint8_t *) malloc(y_size);
+    }
+
+    if (i420_overlay_frame_b.width != out_width || i420_overlay_frame_b.height != out_height) {
+        free(i420_overlay_frame_b.data);
+        i420_overlay_frame_b.width = out_width;
+        i420_overlay_frame_b.height = out_height;
+        i420_overlay_frame_b.data = (uint8_t *) malloc(y_size * 3 / 2);
+        i420_overlay_frame_b.y = i420_overlay_frame_b.data;
+        i420_overlay_frame_b.u = i420_overlay_frame_b.y + y_size;
+        i420_overlay_frame_b.v = i420_overlay_frame_b.u + y_size / 4;
+        i420_overlay_frame_b.alpha = (uint8_t *) malloc(y_size);
     }
 
     if (nv12_frame.width != out_width || nv12_frame.height != out_height) {
@@ -469,18 +481,22 @@ libenc_ARGBToOverlay(JNIEnv *env, jobject thiz, jintArray frame, jint src_width,
                      jint src_height, jboolean need_flip, jint rotate_degree) {
 
     if (frame == NULL) {
-        useOverlay = false;
+        overlay = NULL;
         return;
     }
 
     jint *argb_frame = env->GetIntArrayElements(frame, NULL);
     uint8_t *data = (uint8_t *) argb_frame;
     int y_size = src_width * src_height;
+    struct YuvFrame* new_overlay;
+
+    if (overlay==&i420_overlay_frame_a) new_overlay = &i420_overlay_frame_b;
+    else new_overlay = &i420_overlay_frame_a;
 
     jint ret = ConvertToI420(data, y_size,
-                             i420_overlay_frame.y, src_width,
-                             i420_overlay_frame.u, src_width / 2,
-                             i420_overlay_frame.v, src_width / 2,
+                             new_overlay->y, src_width,
+                             new_overlay->u, src_width / 2,
+                             new_overlay->v, src_width / 2,
                              0, 0,
                              src_width, need_flip ? -src_height : src_height,
                              src_width, src_height,
@@ -488,14 +504,13 @@ libenc_ARGBToOverlay(JNIEnv *env, jobject thiz, jintArray frame, jint src_width,
 
     // Copy alpha
     for (int i = 0; i < y_size; i++) {
-        i420_overlay_frame.alpha[i] = argb_frame[i] >> 24;
+        new_overlay->alpha[i] = argb_frame[i] >> 24;
     }
 
     if (ret < 0) {
         LIBENC_LOGE("ConvertOverlayToI420 failure");
-        useOverlay = false;
     } else {
-        useOverlay = true;
+        overlay = new_overlay;
     }
 
     env->ReleaseIntArrayElements(frame, argb_frame, JNI_ABORT);
