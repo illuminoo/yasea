@@ -152,34 +152,31 @@ public class SrsFlvMuxer {
      * start to the remote server for remux.
      */
     public void start(final String rtmpUrl) {
-        worker = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                Log.i(TAG, "SrsFlvMuxer started");
+        worker = new Thread(() -> {
+            Log.i(TAG, "SrsFlvMuxer started");
 
-                if (!connect(rtmpUrl)) {
-                    Log.e(TAG, "SrsFlvMuxer disconnected");
-                    return;
-                }
-                Log.i(TAG, "SrsFlvMuxer connected");
+            if (!connect(rtmpUrl)) {
+                Log.e(TAG, "SrsFlvMuxer disconnected");
+                return;
+            }
+            Log.i(TAG, "SrsFlvMuxer connected");
 
-                while (worker != null) {
-                    sendFlvTags();
+            while (worker != null) {
+                sendFlvTags();
 
-                    // Waiting for next frame
-                    synchronized (txFrameLock) {
-                        try {
-                            // isEmpty() may take some time, so we set timeout to detect next frame
-                            txFrameLock.wait(500);
-                        } catch (InterruptedException ie) {
-                            worker = null;
-                        }
+                // Waiting for next frame
+                synchronized (txFrameLock) {
+                    try {
+                        // isEmpty() may take some time, so we set timeout to detect next frame
+                        txFrameLock.wait(500);
+                    } catch (InterruptedException ie) {
+                        worker = null;
                     }
                 }
-
-                disconnect();
-                Log.i(TAG, "SrsFlvMuxer stopped");
             }
+
+            disconnect();
+            Log.i(TAG, "SrsFlvMuxer stopped");
         });
         worker.setPriority(Thread.MAX_PRIORITY);
         worker.setDaemon(true);
@@ -190,7 +187,7 @@ public class SrsFlvMuxer {
      * Send all FLV tags from cache
      */
     public void sendFlvTags() {
-//        if (!mFlvTagCache.isEmpty()) {
+//        while (!mFlvTagCache.isEmpty()) {
             SrsFlvFrame frame = mFlvTagCache.poll();
             if (frame==null) return;
             if (frame.isSequenceHeader()) {
@@ -232,9 +229,10 @@ public class SrsFlvMuxer {
         lastVideoPTS = bufferInfo.presentationTimeUs;
 
         AtomicInteger videoFrameCacheNumber = getVideoFrameCacheNumber();
-        if (videoFrameCacheNumber != null && videoFrameCacheNumber.get() < SrsAvcEncoder.VGOP) {
+        if (videoFrameCacheNumber != null && videoFrameCacheNumber.get() < 5*SrsAvcEncoder.VGOP) {
             flv.writeVideoSample(byteBuf, bufferInfo);
         } else {
+            needToFindKeyFrame = true;
             Log.w(TAG, "Network throughput too low");
         }
     }
