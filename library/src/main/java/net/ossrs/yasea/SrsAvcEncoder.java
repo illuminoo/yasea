@@ -15,6 +15,9 @@ import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
 import android.media.MediaCodecList;
 import android.media.MediaFormat;
+import android.os.Handler;
+import android.os.HandlerThread;
+import android.os.Process;
 import android.util.Log;
 
 import java.io.IOException;
@@ -55,16 +58,21 @@ public class SrsAvcEncoder {
     private final Bitmap overlayBitmap;
     private final Canvas overlay;
 
+    private HandlerThread videoThread;
+
+    private MediaCodec.Callback handler;
+
     /**
      * Implements an AVC encoder
      *
-     * @param inWidth
-     * @param inHeight
-     * @param outWidth
-     * @param outHeight
-     * @param HD
+     * @param inWidth   Input width
+     * @param inHeight  Input height
+     * @param outWidth  Output width
+     * @param outHeight Output height
+     * @param HD        Full HD mode
      */
-    public SrsAvcEncoder(int inWidth, int inHeight, int outWidth, int outHeight, boolean HD) {
+    public SrsAvcEncoder(int inWidth, int inHeight, int outWidth, int outHeight, boolean HD, MediaCodec.Callback handler) {
+        this.handler = handler;
 
         // Prepare input
         this.inWidth = inWidth;
@@ -87,7 +95,7 @@ public class SrsAvcEncoder {
         setEncoderGop(VGOP);
 
         if (HD) {
-            vBitrate = 3600 * 1024;
+            vBitrate = 4800 * 1024;
             x264Preset = "veryfast";
         } else {
             vBitrate = 1200 * 1024;
@@ -103,6 +111,7 @@ public class SrsAvcEncoder {
 //        mediaFormat.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 0);
         mediaFormat.setInteger(MediaFormat.KEY_BIT_RATE, vBitrate);
         mediaFormat.setInteger(MediaFormat.KEY_FRAME_RATE, VFPS);
+        mediaFormat.setInteger(MediaFormat.KEY_OPERATING_RATE, VFPS);
         mediaFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, VGOP / VFPS);
         codecName = list.findEncoderForFormat(mediaFormat);
     }
@@ -116,6 +125,11 @@ public class SrsAvcEncoder {
         try {
             vencoder = MediaCodec.createByCodecName(codecName);
             vencoder.configure(mediaFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+            if (handler!=null) {
+                videoThread = new HandlerThread("Video", Process.THREAD_PRIORITY_AUDIO);
+                videoThread.start();
+                vencoder.setCallback(handler, new Handler(videoThread.getLooper()));
+            }
             vencoder.start();
 
             return true;
@@ -126,6 +140,12 @@ public class SrsAvcEncoder {
     }
 
     public void stop() {
+        if (videoThread != null) {
+            Log.i(TAG, "stop background thread");
+            videoThread.quit();
+            videoThread = null;
+        }
+
         if (vencoder != null) {
             Log.i(TAG, "Stop encoder");
             vencoder.stop();
@@ -144,32 +164,39 @@ public class SrsAvcEncoder {
         }
     }
 
-    public void encodeYuvFrame(byte[] frame) {
-        if (frame.length==0) return;
-        encodeYuvFrame(frame, System.nanoTime() / 1000);
+    private void encodeYuvFrame(byte[] yuvFrame) {
+        encodeYuvFrame(yuvFrame, System.nanoTime()/1000);
     }
 
     private void encodeYuvFrame(byte[] yuvFrame, long pts) {
         int inBufferIndex = vencoder.dequeueInputBuffer(0);
         if (inBufferIndex >= 0) {
-            ByteBuffer bb = vencoder.getInputBuffer(inBufferIndex);
-            bb.put(yuvFrame, 0, yuvFrame.length);
-            vencoder.queueInputBuffer(inBufferIndex, 0, yuvFrame.length, pts, 0);
+            encodeYuvFrame(yuvFrame, inBufferIndex, pts);
         }
+    }
+
+    public void encodeYuvFrame(byte[] yuvFrame, int index, long pts) {
+        ByteBuffer bb = vencoder.getInputBuffer(index);
+        bb.put(yuvFrame, 0, yuvFrame.length);
+        vencoder.queueInputBuffer(index, 0, yuvFrame.length, pts, 0);
     }
 
     public boolean getH264Frame(Frame frame) {
         int outBufferIndex = vencoder.dequeueOutputBuffer(vebi, 0);
         if (outBufferIndex >= 0) {
-            ByteBuffer bb = vencoder.getOutputBuffer(outBufferIndex);
-            frame.video = new byte[vebi.size];
-            bb.get(frame.video, 0, vebi.size);
-            frame.keyframe = (vebi.flags & MediaCodec.BUFFER_FLAG_KEY_FRAME) != 0;
-            frame.timestamp = vebi.presentationTimeUs;
-            vencoder.releaseOutputBuffer(outBufferIndex, false);
-            return true;
+            return getH264Frame(frame, outBufferIndex, vebi);
         }
         return false;
+    }
+
+    public boolean getH264Frame(Frame frame, int index, MediaCodec.BufferInfo info) {
+        ByteBuffer bb = vencoder.getOutputBuffer(index);
+        frame.video = new byte[info.size];
+        bb.get(frame.video, 0, info.size);
+        frame.keyframe = (info.flags & MediaCodec.BUFFER_FLAG_KEY_FRAME) != 0;
+        frame.timestamp = info.presentationTimeUs;
+        vencoder.releaseOutputBuffer(index, false);
+        return true;
     }
 
     public void onGetRgbaFrame(byte[] data, int width, int height) {
@@ -181,7 +208,7 @@ public class SrsAvcEncoder {
     }
 
     public void onGetYUV420_888Frame(Image image, Rect boundingBox) {
-        encodeYuvFrame(YUV420_888toYUV(image, boundingBox));
+        encodeYuvFrame(YUV420_888toYUV(image, boundingBox), image.getTimestamp()/1000);
     }
 
     public void onGetArgbFrame(int[] data, int width, int height, Rect boundingBox) {
@@ -215,7 +242,11 @@ public class SrsAvcEncoder {
         planes[0].getBuffer().get(y_frame);
         planes[1].getBuffer().get(u_frame);
         planes[2].getBuffer().get(v_frame);
-        return YUV420_888toI420(y_frame, u_frame, v_frame, inWidth, inHeight, false, 0,
+        return YUV420_888toI420(y_frame, planes[0].getRowStride(),
+                u_frame, planes[1].getRowStride(),
+                v_frame, planes[2].getRowStride(),
+                planes[2].getPixelStride(),
+                inWidth, inHeight, false, 0,
                 cropArea.left, cropArea.top, cropArea.width(), cropArea.height());
     }
 
@@ -262,7 +293,7 @@ public class SrsAvcEncoder {
 
     private native void ARGBToOverlay(int[] frame, int width, int height, boolean flip, int rotate);
 
-    private native byte[] YUV420_888toI420(byte[] y_frame, byte[] u_frame, byte[] v_frame, int width, int height, boolean flip, int rotate, int crop_x, int crop_y, int crop_width, int crop_height);
+    private native byte[] YUV420_888toI420(byte[] y_frame, int y_stride, byte[] u_frame, int u_stride, byte[] v_frame, int v_stride, int uv_stride, int width, int height, boolean flip, int rotate, int crop_x, int crop_y, int crop_width, int crop_height);
 
     private native byte[] ARGBToNV12(int[] frame, int width, int height, boolean flip, int rotate, int crop_x, int crop_y, int crop_width, int crop_height);
 

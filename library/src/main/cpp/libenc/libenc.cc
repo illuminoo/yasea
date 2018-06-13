@@ -54,12 +54,13 @@ static const int DST_COLOR_FMT = FOURCC_NV12;
 
 static struct YuvFrame i420_rotated_frame;
 static struct YuvFrame i420_scaled_frame;
+static struct YuvFrame i420_blended_frame;
 static struct YuvFrame i420_overlay_frame_a;
 static struct YuvFrame i420_overlay_frame_b;
 static struct YuvFrame nv12_frame;
 static struct YuvFrame i420_src_frame;
 
-static struct YuvFrame* overlay = NULL;
+static struct YuvFrame *overlay = NULL;
 
 /**
  * Convert frames to I420
@@ -159,11 +160,16 @@ static bool convert_to_i420(uint8_t *src_frame, jint src_width, jint src_height,
  * @return
  */
 static bool
-YUV420_888toI420(uint8_t *src_y, uint8_t *src_u, uint8_t *src_v, jint src_width, jint src_height,
-                 jint crop_x, jint crop_y, jint crop_width,
-                 jint crop_height,
+YUV420_888toI420(uint8_t *src_y, jint y_stride,
+                 uint8_t *src_u, jint u_stride,
+                 uint8_t *src_v, jint v_stride,
+                 jint uv_stride,
+                 jint src_width, jint src_height,
+                 jint crop_x, jint crop_y,
+                 jint crop_width, jint crop_height,
                  jboolean need_flip, jint rotate_degree) {
 
+    jint ret = 0;
     int y_size = src_width * src_height;
     int r_crop_width = crop_width;
     int r_crop_height = crop_height;
@@ -195,20 +201,22 @@ YUV420_888toI420(uint8_t *src_y, uint8_t *src_u, uint8_t *src_v, jint src_width,
         r_crop_height = crop_width;
     }
 
-    int halfwidth = src_width / 2;
-    int halfheight = src_height / 2;
-
     // Convert pixel stride of 2 to 1 for UV planes
     if (i420_src_frame.width != src_width || i420_src_frame.height != src_height) {
-        free(i420_src_frame.u);
-        free(i420_src_frame.v);
-        i420_src_frame.u = (uint8_t *) malloc(y_size / 4);
-        i420_src_frame.v = (uint8_t *) malloc(y_size / 4);
+        free(i420_src_frame.data);
+        i420_src_frame.data = (uint8_t *) malloc(y_size * 3 / 2);
+        i420_src_frame.y = i420_src_frame.data;
+        i420_src_frame.u = i420_src_frame.y + y_size;
+        i420_src_frame.v = i420_src_frame.u + y_size / 4;
+
         i420_src_frame.width = src_width;
         i420_src_frame.height = src_height;
     }
     int i = 0;
     int j;
+    int halfwidth = src_width / 2;
+    int halfheight = src_height / 2;
+    i420_src_frame.y = src_y;
     for (int y = 0; y < halfheight; y++) {
         for (int x = 0; x < halfwidth; x++) {
             j = y * src_width + x * 2;
@@ -217,21 +225,35 @@ YUV420_888toI420(uint8_t *src_y, uint8_t *src_u, uint8_t *src_v, jint src_width,
             i++;
         }
     }
+//    ret = Android420ToI420(src_y, y_stride,
+//                                src_u, u_stride,
+//                                src_v, v_stride,
+//                                uv_stride,
+//                                i420_src_frame.y, i420_src_frame.width,
+//                                i420_src_frame.u, i420_src_frame.width / 2,
+//                                i420_src_frame.v, i420_src_frame.width / 2,
+//                                i420_src_frame.width,
+//                                i420_src_frame.height);
+//
+//    if (ret < 0) {
+//        LIBENC_LOGE("Android420ToI420 failure");
+//        return false;
+//    }
 
     // Crop frame
     j = src_width * (crop_y >> 2) + (crop_x >> 1);
-    const uint8 *src_yc = src_y + (src_width * crop_y + crop_x);
+    const uint8 *src_yc = i420_src_frame.y + (i420_src_frame.width * crop_y + crop_x);
     const uint8 *src_uc = i420_src_frame.u + j;
     const uint8 *src_vc = i420_src_frame.v + j;
 
     // Rotate frame
-    jint ret = I420Rotate(src_yc, src_width,
-                          src_uc, src_width / 2,
-                          src_vc, src_width / 2,
-                          i420_rotated_frame.y, r_crop_width,
-                          i420_rotated_frame.u, r_crop_width / 2,
-                          i420_rotated_frame.v, r_crop_width / 2,
-                          r_crop_width, r_crop_height, (RotationMode) rotate_degree);
+    ret = I420Rotate(src_yc, src_width,
+                     src_uc, src_width / 2,
+                     src_vc, src_width / 2,
+                     i420_rotated_frame.y, r_crop_width,
+                     i420_rotated_frame.u, r_crop_width / 2,
+                     i420_rotated_frame.v, r_crop_width / 2,
+                     r_crop_width, r_crop_height, (RotationMode) rotate_degree);
 
     if (ret < 0) {
         LIBENC_LOGE("I420Rotate failure");
@@ -254,7 +276,7 @@ YUV420_888toI420(uint8_t *src_y, uint8_t *src_u, uint8_t *src_v, jint src_width,
         return false;
     }
 
-    if (overlay!=NULL) {
+    if (overlay != NULL) {
         ret = I420Blend(overlay->y, overlay->width,
                         overlay->u, overlay->width / 2,
                         overlay->v, overlay->width / 2,
@@ -262,11 +284,11 @@ YUV420_888toI420(uint8_t *src_y, uint8_t *src_u, uint8_t *src_v, jint src_width,
                         i420_scaled_frame.u, i420_scaled_frame.width / 2,
                         i420_scaled_frame.v, i420_scaled_frame.width / 2,
                         overlay->alpha, overlay->width,
-                        i420_scaled_frame.y, i420_scaled_frame.width,
-                        i420_scaled_frame.u, i420_scaled_frame.width / 2,
-                        i420_scaled_frame.v, i420_scaled_frame.width / 2,
-                        i420_scaled_frame.width,
-                        i420_scaled_frame.height
+                        i420_blended_frame.y, i420_blended_frame.width,
+                        i420_blended_frame.u, i420_blended_frame.width / 2,
+                        i420_blended_frame.v, i420_blended_frame.width / 2,
+                        i420_blended_frame.width,
+                        i420_blended_frame.height
         );
 
         if (ret < 0) {
@@ -299,6 +321,16 @@ static void libenc_setEncoderPreset(JNIEnv *env, jobject thiz, jstring preset) {
 static void
 libenc_setEncoderResolution(JNIEnv *env, jobject thiz, jint out_width, jint out_height) {
     int y_size = out_width * out_height;
+
+    if (i420_blended_frame.width != out_width || i420_blended_frame.height != out_height) {
+        free(i420_blended_frame.data);
+        i420_blended_frame.width = out_width;
+        i420_blended_frame.height = out_height;
+        i420_blended_frame.data = (uint8_t *) malloc(y_size * 3 / 2);
+        i420_blended_frame.y = i420_blended_frame.data;
+        i420_blended_frame.u = i420_blended_frame.y + y_size;
+        i420_blended_frame.v = i420_blended_frame.u + y_size / 4;
+    }
 
     if (i420_scaled_frame.width != out_width || i420_scaled_frame.height != out_height) {
         free(i420_scaled_frame.data);
@@ -440,10 +472,15 @@ libenc_ARGBToI420(JNIEnv *env, jobject thiz, jintArray frame, jint src_width,
 
 // For ImageReader frame
 static jbyteArray
-libenc_YUV420_888toI420(JNIEnv *env, jobject thiz, jbyteArray y_frame, jbyteArray u_frame,
-                        jbyteArray v_frame, jint src_width,
-                        jint src_height, jboolean need_flip, jint rotate_degree,
-                        jint crop_x, jint crop_y, jint crop_width, jint crop_height) {
+libenc_YUV420_888toI420(JNIEnv *env, jobject thiz,
+                        jbyteArray y_frame, jint y_stride,
+                        jbyteArray u_frame, jint u_stride,
+                        jbyteArray v_frame, jint v_stride,
+                        jint uv_stride,
+                        jint src_width, jint src_height,
+                        jboolean need_flip, jint rotate_degree,
+                        jint crop_x, jint crop_y,
+                        jint crop_width, jint crop_height) {
 
     jbyte *y_framed = env->GetByteArrayElements(y_frame, NULL);
     jbyte *u_framed = env->GetByteArrayElements(u_frame, NULL);
@@ -451,21 +488,18 @@ libenc_YUV420_888toI420(JNIEnv *env, jobject thiz, jbyteArray y_frame, jbyteArra
 
     jbyteArray i420Frame = env->NewByteArray(0);
 
-    if (YUV420_888toI420((uint8_t *) y_framed,
-                         (uint8_t *) u_framed,
-                         (uint8_t *) v_framed,
-                         src_width,
-                         src_height,
-                         crop_x,
-                         crop_y,
-                         crop_width,
-                         crop_height,
-                         need_flip,
-                         rotate_degree)) {
+    if (YUV420_888toI420((uint8_t *) y_framed, y_stride,
+                         (uint8_t *) u_framed, u_stride,
+                         (uint8_t *) v_framed, v_stride,
+                         uv_stride,
+                         src_width, src_height,
+                         crop_x, crop_y,
+                         crop_width, crop_height,
+                         need_flip, rotate_degree)) {
 
-        int y_size = i420_scaled_frame.width * i420_scaled_frame.height;
+        int y_size = i420_blended_frame.width * i420_blended_frame.height;
         i420Frame = env->NewByteArray(y_size * 3 / 2);
-        env->SetByteArrayRegion(i420Frame, 0, y_size * 3 / 2, (jbyte *) i420_scaled_frame.data);
+        env->SetByteArrayRegion(i420Frame, 0, y_size * 3 / 2, (jbyte *) i420_blended_frame.data);
     }
 
     env->ReleaseByteArrayElements(y_frame, y_framed, JNI_ABORT);
@@ -488,9 +522,9 @@ libenc_ARGBToOverlay(JNIEnv *env, jobject thiz, jintArray frame, jint src_width,
     jint *argb_frame = env->GetIntArrayElements(frame, NULL);
     uint8_t *data = (uint8_t *) argb_frame;
     int y_size = src_width * src_height;
-    struct YuvFrame* new_overlay;
+    struct YuvFrame *new_overlay;
 
-    if (overlay==&i420_overlay_frame_a) new_overlay = &i420_overlay_frame_b;
+    if (overlay == &i420_overlay_frame_a) new_overlay = &i420_overlay_frame_b;
     else new_overlay = &i420_overlay_frame_a;
 
     jint ret = ConvertToI420(data, y_size,
@@ -711,22 +745,22 @@ static jboolean libenc_openSoftEncoder(JNIEnv *env, jobject thiz) {
 }
 
 static JNINativeMethod libenc_methods[] = {
-        {"setEncoderResolution", "(II)V",                 (void *) libenc_setEncoderResolution},
-        {"setEncoderFps",        "(I)V",                  (void *) libenc_setEncoderFps},
-        {"setEncoderGop",        "(I)V",                  (void *) libenc_setEncoderGop},
-        {"setEncoderBitrate",    "(I)V",                  (void *) libenc_setEncoderBitrate},
-        {"setEncoderPreset",     "(Ljava/lang/String;)V", (void *) libenc_setEncoderPreset},
-        {"RGBAToI420",           "([BIIZI)[B",            (void *) libenc_RGBAToI420},
-        {"RGBAToNV12",           "([BIIZI)[B",            (void *) libenc_RGBAToNV12},
-        {"ARGBToNV12",           "([IIIZIIIII)[B",        (void *) libenc_ARGBToNV12},
-        {"ARGBToI420",           "([IIIZIIIII)[B",        (void *) libenc_ARGBToI420},
-        {"ARGBToOverlay",        "([IIIZI)V",             (void *) libenc_ARGBToOverlay},
-        {"YUV420_888toI420",     "([B[B[BIIZIIIII)[B",    (void *) libenc_YUV420_888toI420},
-        {"NV21ToNV12",           "([BIIZIIIII)[B",        (void *) libenc_NV21ToNV12},
-        {"NV21ToI420",           "([BIIZIIIII)[B",        (void *) libenc_NV21ToI420},
-        {"openSoftEncoder",      "()Z",                   (void *) libenc_openSoftEncoder},
-        {"closeSoftEncoder",     "()V",                   (void *) libenc_closeSoftEncoder},
-        {"RGBASoftEncode",       "([BIIZIJ)I",            (void *) libenc_RGBASoftEncode},
+        {"setEncoderResolution", "(II)V",                  (void *) libenc_setEncoderResolution},
+        {"setEncoderFps",        "(I)V",                   (void *) libenc_setEncoderFps},
+        {"setEncoderGop",        "(I)V",                   (void *) libenc_setEncoderGop},
+        {"setEncoderBitrate",    "(I)V",                   (void *) libenc_setEncoderBitrate},
+        {"setEncoderPreset",     "(Ljava/lang/String;)V",  (void *) libenc_setEncoderPreset},
+        {"RGBAToI420",           "([BIIZI)[B",             (void *) libenc_RGBAToI420},
+        {"RGBAToNV12",           "([BIIZI)[B",             (void *) libenc_RGBAToNV12},
+        {"ARGBToNV12",           "([IIIZIIIII)[B",         (void *) libenc_ARGBToNV12},
+        {"ARGBToI420",           "([IIIZIIIII)[B",         (void *) libenc_ARGBToI420},
+        {"ARGBToOverlay",        "([IIIZI)V",              (void *) libenc_ARGBToOverlay},
+        {"YUV420_888toI420",     "([BI[BI[BIIIIZIIIII)[B", (void *) libenc_YUV420_888toI420},
+        {"NV21ToNV12",           "([BIIZIIIII)[B",         (void *) libenc_NV21ToNV12},
+        {"NV21ToI420",           "([BIIZIIIII)[B",         (void *) libenc_NV21ToI420},
+        {"openSoftEncoder",      "()Z",                    (void *) libenc_openSoftEncoder},
+        {"closeSoftEncoder",     "()V",                    (void *) libenc_closeSoftEncoder},
+        {"RGBASoftEncode",       "([BIIZIJ)I",             (void *) libenc_RGBASoftEncode},
 };
 
 jint JNI_OnLoad(JavaVM *vm, void *reserved) {

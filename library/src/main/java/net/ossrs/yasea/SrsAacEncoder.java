@@ -16,6 +16,7 @@ import android.media.audiofx.AcousticEchoCanceler;
 import android.media.audiofx.AutomaticGainControl;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.os.Process;
 import android.util.Log;
 
 import java.io.IOException;
@@ -128,7 +129,7 @@ public class SrsAacEncoder extends MediaCodec.Callback {
 
         if (audioThread!=null) {
             Log.i(TAG, "stop background thread");
-            audioThread.quitSafely();
+            audioThread.quit();
             audioThread = null;
         }
 
