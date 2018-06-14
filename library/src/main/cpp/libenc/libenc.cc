@@ -497,9 +497,17 @@ libenc_YUV420_888toI420(JNIEnv *env, jobject thiz,
                          crop_width, crop_height,
                          need_flip, rotate_degree)) {
 
-        int y_size = i420_blended_frame.width * i420_blended_frame.height;
-        i420Frame = env->NewByteArray(y_size * 3 / 2);
-        env->SetByteArrayRegion(i420Frame, 0, y_size * 3 / 2, (jbyte *) i420_blended_frame.data);
+        if (overlay!=NULL) {
+            int y_size = i420_blended_frame.width * i420_blended_frame.height;
+            i420Frame = env->NewByteArray(y_size * 3 / 2);
+            env->SetByteArrayRegion(i420Frame, 0, y_size * 3 / 2,
+                                    (jbyte *) i420_blended_frame.data);
+        } else {
+            int y_size = i420_scaled_frame.width * i420_scaled_frame.height;
+            i420Frame = env->NewByteArray(y_size * 3 / 2);
+            env->SetByteArrayRegion(i420Frame, 0, y_size * 3 / 2,
+                                    (jbyte *) i420_scaled_frame.data);
+        }
     }
 
     env->ReleaseByteArrayElements(y_frame, y_framed, JNI_ABORT);
