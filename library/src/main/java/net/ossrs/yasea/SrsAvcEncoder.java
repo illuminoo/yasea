@@ -126,7 +126,7 @@ public class SrsAvcEncoder {
             vencoder = MediaCodec.createByCodecName(codecName);
             vencoder.configure(mediaFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
             if (handler!=null) {
-                videoThread = new HandlerThread("Video", Process.THREAD_PRIORITY_AUDIO);
+                videoThread = new HandlerThread("Video");
                 videoThread.start();
                 vencoder.setCallback(handler, new Handler(videoThread.getLooper()));
             }
