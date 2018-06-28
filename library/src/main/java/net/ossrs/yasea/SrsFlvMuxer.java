@@ -162,7 +162,24 @@ public class SrsFlvMuxer {
             Log.i(TAG, "SrsFlvMuxer connected");
 
             while (worker != null) {
-                sendFlvTags();
+                while (!mFlvTagCache.isEmpty()) {
+                    SrsFlvFrame frame = mFlvTagCache.poll();
+                    if (frame.isSequenceHeader()) {
+                        if (frame.isVideo()) {
+                            mVideoSequenceHeader = frame;
+                            sendFlvTag(mVideoSequenceHeader);
+                        } else if (frame.isAudio()) {
+                            mAudioSequenceHeader = frame;
+                            sendFlvTag(mAudioSequenceHeader);
+                        }
+                    } else {
+                        if (frame.isVideo() && mVideoSequenceHeader != null) {
+                            sendFlvTag(frame);
+                        } else if (frame.isAudio() && mAudioSequenceHeader != null) {
+                            sendFlvTag(frame);
+                        }
+                    }
+                }
 
                 // Waiting for next frame
                 synchronized (txFrameLock) {
@@ -187,25 +204,23 @@ public class SrsFlvMuxer {
      * Send all FLV tags from cache
      */
     public void sendFlvTags() {
-//        while (!mFlvTagCache.isEmpty()) {
-            SrsFlvFrame frame = mFlvTagCache.poll();
-            if (frame==null) return;
-            if (frame.isSequenceHeader()) {
-                if (frame.isVideo()) {
-                    mVideoSequenceHeader = frame;
-                    sendFlvTag(mVideoSequenceHeader);
-                } else if (frame.isAudio()) {
-                    mAudioSequenceHeader = frame;
-                    sendFlvTag(mAudioSequenceHeader);
-                }
-            } else {
-                if (frame.isVideo() && mVideoSequenceHeader != null) {
-                    sendFlvTag(frame);
-                } else if (frame.isAudio() && mAudioSequenceHeader != null) {
-                    sendFlvTag(frame);
-                }
+        SrsFlvFrame frame = mFlvTagCache.poll();
+        if (frame == null) return;
+        if (frame.isSequenceHeader()) {
+            if (frame.isVideo()) {
+                mVideoSequenceHeader = frame;
+                sendFlvTag(mVideoSequenceHeader);
+            } else if (frame.isAudio()) {
+                mAudioSequenceHeader = frame;
+                sendFlvTag(mAudioSequenceHeader);
             }
-//        }
+        } else {
+            if (frame.isVideo() && mVideoSequenceHeader != null) {
+                sendFlvTag(frame);
+            } else if (frame.isAudio() && mAudioSequenceHeader != null) {
+                sendFlvTag(frame);
+            }
+        }
     }
 
     /**
@@ -229,7 +244,7 @@ public class SrsFlvMuxer {
         lastVideoPTS = bufferInfo.presentationTimeUs;
 
         AtomicInteger videoFrameCacheNumber = getVideoFrameCacheNumber();
-        if (videoFrameCacheNumber != null && videoFrameCacheNumber.get() < 5*SrsAvcEncoder.VGOP) {
+        if (videoFrameCacheNumber != null && videoFrameCacheNumber.get() < 5 * SrsAvcEncoder.VGOP) {
             flv.writeVideoSample(byteBuf, bufferInfo);
         } else {
             needToFindKeyFrame = true;
@@ -244,10 +259,11 @@ public class SrsFlvMuxer {
      * @param bufferInfo The buffer information related to this sample.
      */
     public void writeAudioSample(ByteBuffer byteBuf, MediaCodec.BufferInfo bufferInfo) {
-        if (startPTS == 0) startPTS = bufferInfo.presentationTimeUs - offset;
+        if (startPTS == 0) return;
         bufferInfo.presentationTimeUs -= startPTS;
 
         if (bufferInfo.presentationTimeUs < lastAudioPTS) return;
+        if (bufferInfo.presentationTimeUs < lastVideoPTS) return;
         lastAudioPTS = bufferInfo.presentationTimeUs;
 
         flv.writeAudioSample(byteBuf, bufferInfo);

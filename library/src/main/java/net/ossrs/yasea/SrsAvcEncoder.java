@@ -108,10 +108,8 @@ public class SrsAvcEncoder {
         colorFormat = MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Planar;
         mediaFormat = MediaFormat.createVideoFormat(CODEC, outWidth, outHeight);
         mediaFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT, colorFormat);
-//        mediaFormat.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 0);
         mediaFormat.setInteger(MediaFormat.KEY_BIT_RATE, vBitrate);
         mediaFormat.setInteger(MediaFormat.KEY_FRAME_RATE, VFPS);
-        mediaFormat.setInteger(MediaFormat.KEY_OPERATING_RATE, VFPS);
         mediaFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, VGOP / VFPS);
         codecName = list.findEncoderForFormat(mediaFormat);
     }
