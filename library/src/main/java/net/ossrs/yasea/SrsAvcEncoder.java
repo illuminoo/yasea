@@ -17,7 +17,6 @@ import android.media.MediaCodecList;
 import android.media.MediaFormat;
 import android.os.Handler;
 import android.os.HandlerThread;
-import android.os.Process;
 import android.util.Log;
 
 import java.io.IOException;
@@ -29,14 +28,27 @@ import java.nio.ByteBuffer;
 public class SrsAvcEncoder {
     private static final String TAG = "SrsAvcEncoder";
 
+    /**
+     * Default encoder
+     */
     public static final String CODEC = "video/avc";
-    public static final int VFPS = 30;
-    public static final int VGOP = 60;
 
-    private final String x264Preset;
-    public final int outWidth;
-    public final int outHeight;
-    public final int vBitrate;
+    /**
+     * Default video width
+     */
+    public static final int WIDTH = 1920;
+
+    /**
+     * Default video height
+     */
+    public static final int HEIGHT = 1080;
+
+    //    private final String x264Preset;
+    private final int outWidth;
+    private final int outHeight;
+    private final int vBitrate;
+    private final int vFps;
+    private final int vGop;
 
     public MediaFormat mediaFormat;
     private final MediaCodec.BufferInfo vebi = new MediaCodec.BufferInfo();
@@ -69,9 +81,10 @@ public class SrsAvcEncoder {
      * @param inHeight  Input height
      * @param outWidth  Output width
      * @param outHeight Output height
-     * @param HD        Full HD mode
+     * @param fps       Output framerate
+     * @param bitrate   Output bitrate
      */
-    public SrsAvcEncoder(int inWidth, int inHeight, int outWidth, int outHeight, boolean HD, MediaCodec.Callback handler) {
+    public SrsAvcEncoder(int inWidth, int inHeight, int outWidth, int outHeight, int fps, int bitrate, MediaCodec.Callback handler) {
         this.handler = handler;
 
         // Prepare input
@@ -84,33 +97,40 @@ public class SrsAvcEncoder {
         // Prepare video overlay
         overlayBitmap = Bitmap.createBitmap(outWidth, outHeight, Bitmap.Config.ARGB_8888);
         overlay = new Canvas(overlayBitmap);
+        if (outWidth != WIDTH || outHeight != HEIGHT) {
+            overlay.scale(outWidth * 1f / WIDTH, outHeight * 1f / HEIGHT);
+        }
 
         // Prepare output
         this.outWidth = outWidth;
         this.outHeight = outHeight;
         argb_frame = new int[outWidth * outHeight];
-
         setEncoderResolution(outWidth, outHeight);
-        setEncoderFps(VFPS);
-        setEncoderGop(VGOP);
 
-        if (HD) {
-            vBitrate = 4800 * 1024;
-            x264Preset = "veryfast";
-        } else {
-            vBitrate = 1200 * 1024;
-            x264Preset = "superfast";
-        }
-        setEncoderBitrate(vBitrate);
-        setEncoderPreset(x264Preset);
+        vFps = fps;
+        vGop = 2 * fps;
+        vBitrate = bitrate * 1024;
+
+//        setEncoderFps(vFps);
+//        setEncoderGop(vGop);
+//
+//        if (HD) {
+//            vBitrate = 4800 * 1024;
+//            x264Preset = "veryfast";
+//        } else {
+//            vBitrate = 1200 * 1024;
+//            x264Preset = "superfast";
+//        }
+//        setEncoderBitrate(vBitrate);
+//        setEncoderPreset(x264Preset);
 
         MediaCodecList list = new MediaCodecList(MediaCodecList.REGULAR_CODECS);
         colorFormat = MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Planar;
         mediaFormat = MediaFormat.createVideoFormat(CODEC, outWidth, outHeight);
         mediaFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT, colorFormat);
         mediaFormat.setInteger(MediaFormat.KEY_BIT_RATE, vBitrate);
-        mediaFormat.setInteger(MediaFormat.KEY_FRAME_RATE, VFPS);
-        mediaFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, VGOP / VFPS);
+        mediaFormat.setInteger(MediaFormat.KEY_FRAME_RATE, vFps);
+        mediaFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, vGop / vFps);
         codecName = list.findEncoderForFormat(mediaFormat);
     }
 
@@ -123,7 +143,7 @@ public class SrsAvcEncoder {
         try {
             vencoder = MediaCodec.createByCodecName(codecName);
             vencoder.configure(mediaFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
-            if (handler!=null) {
+            if (handler != null) {
                 videoThread = new HandlerThread("Video");
                 videoThread.start();
                 vencoder.setCallback(handler, new Handler(videoThread.getLooper()));
@@ -163,7 +183,7 @@ public class SrsAvcEncoder {
     }
 
     private void encodeYuvFrame(byte[] yuvFrame) {
-        encodeYuvFrame(yuvFrame, System.nanoTime()/1000);
+        encodeYuvFrame(yuvFrame, System.nanoTime() / 1000);
     }
 
     private void encodeYuvFrame(byte[] yuvFrame, long pts) {
@@ -206,7 +226,7 @@ public class SrsAvcEncoder {
     }
 
     public void onGetYUV420_888Frame(Image image, Rect boundingBox) {
-        encodeYuvFrame(YUV420_888toYUV(image, boundingBox), image.getTimestamp()/1000);
+        encodeYuvFrame(YUV420_888toYUV(image, boundingBox), image.getTimestamp() / 1000);
     }
 
     public void onGetArgbFrame(int[] data, int width, int height, Rect boundingBox) {

@@ -244,7 +244,7 @@ public class SrsFlvMuxer {
         lastVideoPTS = bufferInfo.presentationTimeUs;
 
         AtomicInteger videoFrameCacheNumber = getVideoFrameCacheNumber();
-        if (videoFrameCacheNumber != null && videoFrameCacheNumber.get() < 5 * SrsAvcEncoder.VGOP) {
+        if (videoFrameCacheNumber != null && videoFrameCacheNumber.get() < 300) {
             flv.writeVideoSample(byteBuf, bufferInfo);
         } else {
             needToFindKeyFrame = true;
