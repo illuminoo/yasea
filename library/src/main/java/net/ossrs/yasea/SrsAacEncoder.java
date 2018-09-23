@@ -16,7 +16,6 @@ import android.media.audiofx.AcousticEchoCanceler;
 import android.media.audiofx.AutomaticGainControl;
 import android.os.Handler;
 import android.os.HandlerThread;
-import android.os.Process;
 import android.util.Log;
 
 import java.io.IOException;
@@ -35,8 +34,10 @@ public class SrsAacEncoder extends MediaCodec.Callback {
 
     private final SrsFlvMuxer muxer;
 
-    public final MediaFormat mediaFormat;
+    private final int mPcmBufferSize;
     private final byte[] mPcmBuffer;
+
+    public final MediaFormat mediaFormat;
     private final String codecName;
 
     private MediaCodec aencoder;
@@ -69,13 +70,14 @@ public class SrsAacEncoder extends MediaCodec.Callback {
      */
     public SrsAacEncoder(SrsFlvMuxer muxer) {
         this.muxer = muxer;
-        mPcmBuffer = new byte[getPcmBufferSize()];
+        mPcmBufferSize = AudioRecord.getMinBufferSize(ASAMPLERATE, AudioFormat.CHANNEL_IN_STEREO,
+                AudioFormat.ENCODING_PCM_16BIT) * 4;
+        mPcmBuffer = new byte[mPcmBufferSize];
 
         MediaCodecList list = new MediaCodecList(MediaCodecList.REGULAR_CODECS);
-        int ach = aChannelConfig == AudioFormat.CHANNEL_IN_STEREO ? 2 : 1;
-        mediaFormat = MediaFormat.createAudioFormat(ACODEC, ASAMPLERATE, ach);
+        mediaFormat = MediaFormat.createAudioFormat(ACODEC, ASAMPLERATE, 2);
         mediaFormat.setInteger(MediaFormat.KEY_BIT_RATE, ABITRATE);
-        mediaFormat.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, getPcmBufferSize());
+        mediaFormat.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, mPcmBufferSize);
         codecName = list.findEncoderForFormat(mediaFormat);
     }
 
@@ -84,58 +86,55 @@ public class SrsAacEncoder extends MediaCodec.Callback {
      *
      * @return True when successful
      */
-    public boolean start() {
+    public void start() throws IOException {
 
-        try {
-            // Prepare microphone
-            mic = chooseAudioRecord();
+        // Prepare microphone
+        mic = new AudioRecord(MediaRecorder.AudioSource.DEFAULT, SrsAacEncoder.ASAMPLERATE,
+                AudioFormat.CHANNEL_IN_STEREO, AudioFormat.ENCODING_PCM_16BIT, mPcmBufferSize);
 
-            if (AcousticEchoCanceler.isAvailable()) {
-                aec = AcousticEchoCanceler.create(mic.getAudioSessionId());
-                if (aec != null) aec.setEnabled(true);
-            }
-
-            if (AutomaticGainControl.isAvailable()) {
-                agc = AutomaticGainControl.create(mic.getAudioSessionId());
-                if (agc != null) agc.setEnabled(true);
-            }
-            mic.startRecording();
-
-            // Start Audio encoder
-            aencoder = MediaCodec.createByCodecName(codecName);
-            aencoder.configure(mediaFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
-            audioThread = new HandlerThread("Audio");
-            audioThread.start();
-            aencoder.setCallback(this, new Handler(audioThread.getLooper()));
-            aencoder.start();
-
-            Log.i(TAG, "Started");
-
-            return true;
-        } catch (IOException e) {
-            Log.e(TAG, "Failed to start encoder", e);
+        if (AcousticEchoCanceler.isAvailable()) {
+            aec = AcousticEchoCanceler.create(mic.getAudioSessionId());
+            if (aec != null) aec.setEnabled(true);
         }
 
-        return false;
+        if (AutomaticGainControl.isAvailable()) {
+            agc = AutomaticGainControl.create(mic.getAudioSessionId());
+            if (agc != null) agc.setEnabled(true);
+        }
+        mic.startRecording();
+
+        // Start Audio encoder
+        aencoder = MediaCodec.createByCodecName(codecName);
+        aencoder.configure(mediaFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+        audioThread = new HandlerThread("Audio");
+        audioThread.start();
+        aencoder.setCallback(this, new Handler(audioThread.getLooper()));
+        aencoder.start();
+
+        Log.i(TAG, "Started");
     }
 
     public void stop() {
         if (aencoder != null) {
             Log.i(TAG, "stop aencoder");
             aencoder.stop();
+            mic.stop();
+        }
+
+        if (audioThread != null) {
+            Log.i(TAG, "stop background thread");
+            audioThread.quitSafely();
+            audioThread = null;
+        }
+
+        if (aencoder != null) {
+            Log.i(TAG, "release aencoder");
             aencoder.release();
             aencoder = null;
         }
 
-        if (audioThread!=null) {
-            Log.i(TAG, "stop background thread");
-            audioThread.quit();
-            audioThread = null;
-        }
-
         if (mic != null) {
             mic.setRecordPositionUpdateListener(null);
-            mic.stop();
             mic.release();
             mic = null;
         }
@@ -151,29 +150,6 @@ public class SrsAacEncoder extends MediaCodec.Callback {
             agc.release();
             agc = null;
         }
-    }
-
-    private AudioRecord chooseAudioRecord() {
-        AudioRecord mic = new AudioRecord(MediaRecorder.AudioSource.DEFAULT, SrsAacEncoder.ASAMPLERATE,
-                AudioFormat.CHANNEL_IN_STEREO, AudioFormat.ENCODING_PCM_16BIT, getPcmBufferSize() * 4);
-        if (mic.getState() != AudioRecord.STATE_INITIALIZED) {
-            mic = new AudioRecord(MediaRecorder.AudioSource.DEFAULT, SrsAacEncoder.ASAMPLERATE,
-                    AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, getPcmBufferSize() * 4);
-            if (mic.getState() != AudioRecord.STATE_INITIALIZED) {
-                mic = null;
-            } else {
-                SrsAacEncoder.aChannelConfig = AudioFormat.CHANNEL_IN_MONO;
-            }
-        } else {
-            SrsAacEncoder.aChannelConfig = AudioFormat.CHANNEL_IN_STEREO;
-        }
-
-        return mic;
-    }
-
-    public int getPcmBufferSize() {
-        return AudioRecord.getMinBufferSize(ASAMPLERATE, AudioFormat.CHANNEL_IN_STEREO,
-                AudioFormat.ENCODING_PCM_16BIT);
     }
 
     public void captureAudio() {
@@ -194,11 +170,12 @@ public class SrsAacEncoder extends MediaCodec.Callback {
     @Override
     public void onInputBufferAvailable(MediaCodec codec, int index) {
         try {
+            long pts = System.nanoTime() / 1000;
             int size = mic.read(mPcmBuffer, 0, mPcmBuffer.length);
             if (size > 0) {
                 ByteBuffer bb = codec.getInputBuffer(index);
                 bb.put(mPcmBuffer, 0, size);
-                codec.queueInputBuffer(index, 0, size, System.nanoTime() / 1000, 0);
+                codec.queueInputBuffer(index, 0, size, pts, 0);
             }
         } catch (IllegalStateException e) {
             // Ignore

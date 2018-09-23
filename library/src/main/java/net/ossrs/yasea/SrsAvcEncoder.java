@@ -62,6 +62,11 @@ public class SrsAvcEncoder {
     private int rotate = 0;
     private int rotateFlip = 180;
 
+    private int y_rowstride;
+    private int u_rowstride;
+    private int v_rowstride;
+    private int pixelstride;
+
     private final byte[] y_frame;
     private final byte[] u_frame;
     private final byte[] v_frame;
@@ -113,16 +118,8 @@ public class SrsAvcEncoder {
 
 //        setEncoderFps(vFps);
 //        setEncoderGop(vGop);
-//
-//        if (HD) {
-//            vBitrate = 4800 * 1024;
-//            x264Preset = "veryfast";
-//        } else {
-//            vBitrate = 1200 * 1024;
-//            x264Preset = "superfast";
-//        }
 //        setEncoderBitrate(vBitrate);
-//        setEncoderPreset(x264Preset);
+//        setEncoderPreset("veryfast");
 
         MediaCodecList list = new MediaCodecList(MediaCodecList.REGULAR_CODECS);
         colorFormat = MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Planar;
@@ -139,22 +136,15 @@ public class SrsAvcEncoder {
      *
      * @return True when successful
      */
-    public boolean start() {
-        try {
-            vencoder = MediaCodec.createByCodecName(codecName);
-            vencoder.configure(mediaFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
-            if (handler != null) {
-                videoThread = new HandlerThread("Video");
-                videoThread.start();
-                vencoder.setCallback(handler, new Handler(videoThread.getLooper()));
-            }
-            vencoder.start();
-
-            return true;
-        } catch (IOException e) {
-            Log.e(TAG, "Failed to start encoder", e);
+    public void start() throws IOException {
+        vencoder = MediaCodec.createByCodecName(codecName);
+        vencoder.configure(mediaFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+        if (handler != null) {
+            videoThread = new HandlerThread("Video");
+            videoThread.start();
+            vencoder.setCallback(handler, new Handler(videoThread.getLooper()));
         }
-        return false;
+        vencoder.start();
     }
 
     public void stop() {
@@ -225,8 +215,8 @@ public class SrsAvcEncoder {
         encodeYuvFrame(NV21toYUV(data, width, height, boundingBox));
     }
 
-    public void onGetYUV420_888Frame(Image image, Rect boundingBox) {
-        encodeYuvFrame(YUV420_888toYUV(image, boundingBox), image.getTimestamp() / 1000);
+    public void onGetYUV420_888Frame(Image image, Rect boundingBox, long pts) {
+        encodeYuvFrame(YUV420_888toYUV(image, boundingBox), pts);
     }
 
     public void onGetArgbFrame(int[] data, int width, int height, Rect boundingBox) {
@@ -256,14 +246,20 @@ public class SrsAvcEncoder {
     }
 
     public byte[] YUV420_888toYUV(Image image, Rect cropArea) {
-        Image.Plane[] planes = image.getPlanes();
-        planes[0].getBuffer().get(y_frame);
-        planes[1].getBuffer().get(u_frame);
-        planes[2].getBuffer().get(v_frame);
-        return YUV420_888toI420(y_frame, planes[0].getRowStride(),
-                u_frame, planes[1].getRowStride(),
-                v_frame, planes[2].getRowStride(),
-                planes[2].getPixelStride(),
+        if (image != null) {
+            Image.Plane[] planes = image.getPlanes();
+            y_rowstride = planes[0].getRowStride();
+            u_rowstride = planes[1].getRowStride();
+            v_rowstride = planes[2].getRowStride();
+            pixelstride = planes[2].getPixelStride();
+            planes[0].getBuffer().get(y_frame);
+            planes[1].getBuffer().get(u_frame);
+            planes[2].getBuffer().get(v_frame);
+        }
+        return YUV420_888toI420(y_frame, y_rowstride,
+                u_frame, u_rowstride,
+                v_frame, v_rowstride,
+                pixelstride,
                 inWidth, inHeight, false, 0,
                 cropArea.left, cropArea.top, cropArea.width(), cropArea.height());
     }
