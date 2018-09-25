@@ -24,15 +24,13 @@ import java.nio.ByteBuffer;
 /**
  * Implements an Advanced Audio Codec encoder
  */
-public class SrsAacEncoder extends MediaCodec.Callback {
+public class SrsAacEncoder {
     private static final String TAG = "SrsAacEncoder";
 
     public static final String ACODEC = "audio/mp4a-latm";
     public static final int ASAMPLERATE = 44100;
     public static int aChannelConfig = AudioFormat.CHANNEL_IN_STEREO;
     public static final int ABITRATE = 128 * 1024;  // 128 kbps
-
-    private final SrsFlvMuxer muxer;
 
     private final int mPcmBufferSize;
     private final byte[] mPcmBuffer;
@@ -42,6 +40,7 @@ public class SrsAacEncoder extends MediaCodec.Callback {
 
     private MediaCodec aencoder;
     private MediaCodec.BufferInfo aebi = new MediaCodec.BufferInfo();
+    private final MediaCodec.Callback handler;
 
     /**
      * Microphone
@@ -66,10 +65,11 @@ public class SrsAacEncoder extends MediaCodec.Callback {
     /**
      * Constructor
      *
-     * @param muxer FLV muxer
+     * @param handler Codec handler
      */
-    public SrsAacEncoder(SrsFlvMuxer muxer) {
-        this.muxer = muxer;
+    public SrsAacEncoder(MediaCodec.Callback handler) {
+        this.handler = handler;
+
         mPcmBufferSize = AudioRecord.getMinBufferSize(ASAMPLERATE, AudioFormat.CHANNEL_IN_STEREO,
                 AudioFormat.ENCODING_PCM_16BIT) * 4;
         mPcmBuffer = new byte[mPcmBufferSize];
@@ -106,9 +106,11 @@ public class SrsAacEncoder extends MediaCodec.Callback {
         // Start Audio encoder
         aencoder = MediaCodec.createByCodecName(codecName);
         aencoder.configure(mediaFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
-        audioThread = new HandlerThread("Audio");
-        audioThread.start();
-        aencoder.setCallback(this, new Handler(audioThread.getLooper()));
+        if (handler!=null) {
+            audioThread = new HandlerThread("Audio");
+            audioThread.start();
+            aencoder.setCallback(handler, new Handler(audioThread.getLooper()));
+        }
         aencoder.start();
 
         Log.i(TAG, "Started");
@@ -159,15 +161,15 @@ public class SrsAacEncoder extends MediaCodec.Callback {
         }
     }
 
-    public void muxAudio() {
-        int outBufferIndex = aencoder.dequeueOutputBuffer(aebi, 0);
-        while (outBufferIndex >= 0) {
-            onOutputBufferAvailable(aencoder, outBufferIndex, aebi);
-            outBufferIndex = aencoder.dequeueOutputBuffer(aebi, 0);
-        }
-    }
+//    public void muxAudio() {
+//        int outBufferIndex = aencoder.dequeueOutputBuffer(aebi, 0);
+//        while (outBufferIndex >= 0) {
+//            onOutputBufferAvailable(aencoder, outBufferIndex, aebi);
+//            outBufferIndex = aencoder.dequeueOutputBuffer(aebi, 0);
+//        }
+//    }
 
-    @Override
+//    @Override
     public void onInputBufferAvailable(MediaCodec codec, int index) {
         try {
             long pts = System.nanoTime() / 1000;
@@ -182,24 +184,37 @@ public class SrsAacEncoder extends MediaCodec.Callback {
         }
     }
 
-    @Override
-    public void onOutputBufferAvailable(MediaCodec codec, int index, MediaCodec.BufferInfo info) {
-        try {
-            ByteBuffer bb = codec.getOutputBuffer(index);
-            muxer.writeAudioSample(bb, info);
-            codec.releaseOutputBuffer(index, false);
-        } catch (IllegalStateException e) {
-            // Ignore
+    public boolean getAAC(Frame frame) {
+        int outBufferIndex = aencoder.dequeueOutputBuffer(aebi, 0);
+        if (outBufferIndex >= 0) {
+            ByteBuffer bb = aencoder.getOutputBuffer(outBufferIndex);
+            frame.timestamp = aebi.presentationTimeUs;
+            frame.data = new byte[aebi.size];
+            bb.get(frame.data);
+            aencoder.releaseOutputBuffer(outBufferIndex, false);
+            return true;
         }
+        return false;
     }
 
-    @Override
-    public void onError(MediaCodec codec, MediaCodec.CodecException e) {
-
-    }
-
-    @Override
-    public void onOutputFormatChanged(MediaCodec codec, MediaFormat format) {
-
-    }
+//    @Override
+//    public void onOutputBufferAvailable(MediaCodec codec, int index, MediaCodec.BufferInfo info) {
+//        try {
+//            ByteBuffer bb = codec.getOutputBuffer(index);
+//            muxer.writeAudioSample(bb, info);
+//            codec.releaseOutputBuffer(index, false);
+//        } catch (IllegalStateException e) {
+//            // Ignore
+//        }
+//    }
+//
+//    @Override
+//    public void onError(MediaCodec codec, MediaCodec.CodecException e) {
+//
+//    }
+//
+//    @Override
+//    public void onOutputFormatChanged(MediaCodec codec, MediaFormat format) {
+//
+//    }
 }

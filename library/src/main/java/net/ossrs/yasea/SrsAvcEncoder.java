@@ -88,6 +88,7 @@ public class SrsAvcEncoder {
      * @param outHeight Output height
      * @param fps       Output framerate
      * @param bitrate   Output bitrate
+     * @param handler   Codec handler
      */
     public SrsAvcEncoder(int inWidth, int inHeight, int outWidth, int outHeight, int fps, int bitrate, MediaCodec.Callback handler) {
         this.handler = handler;
@@ -149,7 +150,7 @@ public class SrsAvcEncoder {
 
     public void stop() {
         if (videoThread != null) {
-            Log.i(TAG, "stop background thread");
+            Log.i(TAG, "Stop background thread");
             videoThread.quit();
             videoThread = null;
         }
@@ -199,8 +200,8 @@ public class SrsAvcEncoder {
 
     public boolean getH264Frame(Frame frame, int index, MediaCodec.BufferInfo info) {
         ByteBuffer bb = vencoder.getOutputBuffer(index);
-        frame.video = new byte[info.size];
-        bb.get(frame.video, 0, info.size);
+        frame.data = new byte[info.size];
+        bb.get(frame.data, 0, info.size);
         frame.keyframe = (info.flags & MediaCodec.BUFFER_FLAG_KEY_FRAME) != 0;
         frame.timestamp = info.presentationTimeUs;
         vencoder.releaseOutputBuffer(index, false);

@@ -367,6 +367,7 @@ public class SrsFlvMuxer {
 
     /**
      * the aac profile, for ADTS(HLS/TS)
+     *
      * @see https://github.com/simple-rtmp-server/srs/issues/310
      */
     private class SrsAacProfile {
@@ -708,7 +709,7 @@ public class SrsFlvMuxer {
                 // find out the frame size.
                 tbb.data = bb.slice();
                 tbb.size = bi.size - bb.position();
-                }
+            }
             return tbb;
         }
     }
@@ -900,32 +901,32 @@ public class SrsFlvMuxer {
 
             int type = SrsCodecVideoAVCFrame.InterFrame;
             SrsFlvFrameBytes frame = avc.demuxAnnexb(bb, bi, true);
-                int nal_unit_type = frame.data.get(0) & 0x1f;
-                if (nal_unit_type == SrsAvcNaluType.IDR) {
-                    type = SrsCodecVideoAVCFrame.KeyFrame;
+            int nal_unit_type = frame.data.get(0) & 0x1f;
+            if (nal_unit_type == SrsAvcNaluType.IDR) {
+                type = SrsCodecVideoAVCFrame.KeyFrame;
             } else if (nal_unit_type == SrsAvcNaluType.SPS || nal_unit_type == SrsAvcNaluType.PPS) {
-                    if (!frame.data.equals(h264_sps)) {
-                        byte[] sps = new byte[frame.size];
-                        frame.data.get(sps);
-                        h264_sps_changed = true;
-                        h264_sps = ByteBuffer.wrap(sps);
+                if (!frame.data.equals(h264_sps)) {
+                    byte[] sps = new byte[frame.size];
+                    frame.data.get(sps);
+                    h264_sps_changed = true;
+                    h264_sps = ByteBuffer.wrap(sps);
                     writeH264SpsPps(dts, pts);
-                    }
+                }
                 frame = avc.demuxAnnexb(bb, bi, false);
-                    if (!frame.data.equals(h264_pps)) {
-                        byte[] pps = new byte[frame.size];
-                        frame.data.get(pps);
-                        h264_pps_changed = true;
-                        h264_pps = ByteBuffer.wrap(pps);
+                if (!frame.data.equals(h264_pps)) {
+                    byte[] pps = new byte[frame.size];
+                    frame.data.get(pps);
+                    h264_pps_changed = true;
+                    h264_pps = ByteBuffer.wrap(pps);
                     writeH264SpsPps(dts, pts);
-                    }
+                }
                 return;
             } else if (nal_unit_type != SrsAvcNaluType.NonIDR) {
                 return;
-                }
+            }
 
-                ipbs.add(avc.muxNaluHeader(frame));
-                ipbs.add(frame);
+            ipbs.add(avc.muxNaluHeader(frame));
+            ipbs.add(frame);
             writeH264IpbFrame(ipbs, type, dts, pts);
             ipbs.clear();
         }
