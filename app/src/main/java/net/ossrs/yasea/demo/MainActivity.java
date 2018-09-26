@@ -33,10 +33,10 @@ public class MainActivity extends AppCompatActivity implements RtmpHandler.RtmpL
 
     private static final String TAG = "Yasea";
 
-    Button btnPublish = null;
-    Button btnSwitchCamera = null;
-    Button btnRecord = null;
-    Button btnSwitchEncoder = null;
+    private Button btnPublish;
+    private Button btnSwitchCamera;
+    private Button btnRecord;
+    private Button btnSwitchEncoder;
 
     private SharedPreferences sp;
     private String rtmpUrl = "rtmp://ossrs.net/" + getRandomAlphaString(3) + '/' + getRandomAlphaDigitString(5);
@@ -72,7 +72,7 @@ public class MainActivity extends AppCompatActivity implements RtmpHandler.RtmpL
         mPublisher.setRtmpHandler(new RtmpHandler(this));
         mPublisher.setRecordHandler(new SrsRecordHandler(this));
         mPublisher.setPreviewResolution(640, 360);
-        mPublisher.setOutputResolution(720, 1280);
+        mPublisher.setOutputResolution(360, 640);
         mPublisher.setVideoHDMode();
         mPublisher.startCamera();
 

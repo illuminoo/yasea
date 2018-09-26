@@ -197,24 +197,10 @@ public class SrsAacEncoder {
         return false;
     }
 
-//    @Override
-//    public void onOutputBufferAvailable(MediaCodec codec, int index, MediaCodec.BufferInfo info) {
-//        try {
-//            ByteBuffer bb = codec.getOutputBuffer(index);
-//            muxer.writeAudioSample(bb, info);
-//            codec.releaseOutputBuffer(index, false);
-//        } catch (IllegalStateException e) {
-//            // Ignore
-//        }
-//    }
-//
-//    @Override
-//    public void onError(MediaCodec codec, MediaCodec.CodecException e) {
-//
-//    }
-//
-//    @Override
-//    public void onOutputFormatChanged(MediaCodec codec, MediaFormat format) {
-//
-//    }
+    /**
+     * @return Audio output format
+     */
+    public MediaFormat getOutputFormat() {
+        return aencoder.getOutputFormat();
+    }
 }

@@ -151,7 +151,7 @@ public class SrsAvcEncoder {
     public void stop() {
         if (videoThread != null) {
             Log.i(TAG, "Stop background thread");
-            videoThread.quit();
+            videoThread.quitSafely();
             videoThread = null;
         }
 
@@ -325,5 +325,12 @@ public class SrsAvcEncoder {
     static {
         System.loadLibrary("yuv");
         System.loadLibrary("enc");
+    }
+
+    /**
+     * @return Output format
+     */
+    public MediaFormat getOutputFormat() {
+        return vencoder.getOutputFormat();
     }
 }

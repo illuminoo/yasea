@@ -105,10 +105,15 @@ public class SrsMp4Muxer {
         samplingFrequencyIndexMap.put(8000, 0xb);
     }
 
+    /**
+     * Constructor
+     *
+     * @param handler Message handler
+     */
     public SrsMp4Muxer(SrsRecordHandler handler) {
         mHandler = handler;
     }
-    
+
     /**
      * start recording.
      */
@@ -131,21 +136,29 @@ public class SrsMp4Muxer {
             public void run() {
                 bRecording = true;
                 while (bRecording) {
+
                     // Keep at least one audio and video frame in cache to ensure monotonically increasing.
                     while (!frameCache.isEmpty()) {
                         SrsEsFrame frame = frameCache.poll();
                         writeSampleData(frame.bb, frame.bi, frame.is_audio());
                     }
+
                     // Waiting for next frame
                     synchronized (writeLock) {
                         try {
                             // isEmpty() may take some time, so we set timeout to detect next frame
                             writeLock.wait(500);
                         } catch (InterruptedException ie) {
-                            worker.interrupt();
+                            worker = null;
+                            bRecording = false;
                         }
                     }
                 }
+
+                finishMovie();
+                mHandler.notifyRecordFinished(mRecFile.getPath());
+                Log.i(TAG, "SrsMp4Muxer stopped");
+                worker = null;
             }
         });
         worker.start();
@@ -183,20 +196,6 @@ public class SrsMp4Muxer {
         needToFindKeyFrame = true;
         aacSpecConfig = false;
         frameCache.clear();
-
-        if (worker != null) {
-            try {
-                worker.join();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-                worker.interrupt();
-            }
-            worker = null;
-
-            finishMovie();
-            mHandler.notifyRecordFinished(mRecFile.getPath());
-        }
-        Log.i(TAG, "SrsMp4Muxer closed");
     }
 
     /**
@@ -234,8 +233,7 @@ public class SrsMp4Muxer {
      * Table 7-1 – NAL unit type codes, syntax element categories, and NAL unit type classes
      * H.264-AVC-ISO_IEC_14496-10-2012.pdf, page 83.
      */
-    private class SrsAvcNaluType
-    {
+    private class SrsAvcNaluType {
         // Unspecified
         public final static int Reserved = 0;
 
@@ -275,40 +273,63 @@ public class SrsMp4Muxer {
         public final static int CodedSliceExt = 20;
     }
 
-    private void writeVideoSample(final ByteBuffer bb, MediaCodec.BufferInfo bi) {
-        int nal_unit_type = bb.get(4) & 0x1f;
-        if (nal_unit_type == SrsAvcNaluType.IDR || nal_unit_type == SrsAvcNaluType.NonIDR) {
-            writeFrameByte(VIDEO_TRACK, bb, bi, nal_unit_type == SrsAvcNaluType.IDR);
-        } else {
-            while (bb.position() < bi.size) {
-                SrsEsFrameBytes frame = avc.annexb_demux(bb, bi);
+    /**
+     * Write video sample
+     *
+     * @param bb Video data
+     * @param bi Frame info
+     */
+    public void writeVideoSample(final ByteBuffer bb, MediaCodec.BufferInfo bi) {
+        int nal_unit_type = 0;
 
-                if (avc.is_sps(frame)) {
-                    if (!frame.data.equals(h264_sps)) {
-                        byte[] sps = new byte[frame.size];
-                        frame.data.get(sps);
-                        h264_sps = ByteBuffer.wrap(sps);
-                        spsList.clear();
-                        spsList.add(sps);
-                    }
-                    continue;
-                }
+        while (bb.position() < bi.size) {
+            SrsEsFrameBytes frame = avc.annexb_demux(bb, bi);
 
-                if (avc.is_pps(frame)) {
-                    if (!frame.data.equals(h264_pps)) {
-                        byte[] pps = new byte[frame.size];
-                        frame.data.get(pps);
-                        h264_pps = ByteBuffer.wrap(pps);
-                        ppsList.clear();
-                        ppsList.add(pps);
-                    }
-                    continue;
-                }
+            // 5bits, 7.3.1 NAL unit syntax,
+            // H.264-AVC-ISO_IEC_14496-10.pdf, page 44.
+            // 7: SPS, 8: PPS, 5: I Frame, 1: P Frame
+            nal_unit_type = frame.data.get(0) & 0x1f;
+            if (nal_unit_type == SrsAvcNaluType.SPS || nal_unit_type == SrsAvcNaluType.PPS) {
+                Log.i(TAG, String.format("annexb demux %dB, pts=%d, frame=%dB, nalu=%d",
+                        bi.size, bi.presentationTimeUs, frame.size, nal_unit_type));
             }
+
+            if (avc.is_sps(frame)) {
+                if (!frame.data.equals(h264_sps)) {
+                    byte[] sps = new byte[frame.size];
+                    frame.data.get(sps);
+                    h264_sps = ByteBuffer.wrap(sps);
+                    spsList.clear();
+                    spsList.add(sps);
+                }
+                continue;
+            }
+
+            if (avc.is_pps(frame)) {
+                if (!frame.data.equals(h264_pps)) {
+                    byte[] pps = new byte[frame.size];
+                    frame.data.get(pps);
+                    h264_pps = ByteBuffer.wrap(pps);
+                    ppsList.clear();
+                    ppsList.add(pps);
+                }
+                continue;
+            }
+        }
+
+        if (nal_unit_type == SrsAvcNaluType.IDR || nal_unit_type == SrsAvcNaluType.NonIDR) {
+            bb.rewind();
+            writeFrameByte(VIDEO_TRACK, bb, bi, nal_unit_type == SrsAvcNaluType.IDR);
         }
     }
 
-    private void writeAudioSample(final ByteBuffer bb, MediaCodec.BufferInfo bi) {
+    /**
+     * Write audio sample
+     *
+     * @param bb Audio data
+     * @param bi Frame info
+     */
+    public void writeAudioSample(final ByteBuffer bb, MediaCodec.BufferInfo bi) {
         if (!aacSpecConfig) {
             aacSpecConfig = true;
         } else {
@@ -428,7 +449,7 @@ public class SrsMp4Muxer {
                 if (!tbbsc.match || tbbsc.nb_start_code < 3) {
                     Log.e(TAG, "annexb not match.");
                     mHandler.notifyRecordIllegalArgumentException(new IllegalArgumentException(
-                        String.format("annexb not match for %dB, pos=%d", bi.size, bb.position())));
+                            String.format("annexb not match for %dB, pos=%d", bi.size, bb.position())));
                 }
 
                 // the start codes.
@@ -764,6 +785,7 @@ public class SrsMp4Muxer {
         @Override
         public void parse(ReadableByteChannel readableByteChannel, ByteBuffer header, long contentSize, BoxParser boxParser) throws IOException {
         }
+
     }
 
     private InterleaveChunkMdat mdat = null;
@@ -823,9 +845,9 @@ public class SrsMp4Muxer {
                 fos.flush();
                 flushBytes = 0;
             }
-        } catch (IOException e) {
+        } catch (Exception e) {
             e.printStackTrace();
-            mHandler.notifyRecordIOException(e);
+            mHandler.notifyRecordIOException(new IOException(e));
         }
     }
 
