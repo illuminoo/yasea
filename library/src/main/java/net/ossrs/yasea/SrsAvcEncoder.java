@@ -34,6 +34,11 @@ public class SrsAvcEncoder {
     public static final String CODEC = "video/avc";
 
     /**
+     * Default color format
+     */
+    private final static int DEFAULT_COLOR_FORMAT = MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Planar;
+
+    /**
      * Default video width
      */
     public static final int WIDTH = 1920;
@@ -52,7 +57,6 @@ public class SrsAvcEncoder {
 
     public MediaFormat mediaFormat;
     private final MediaCodec.BufferInfo vebi = new MediaCodec.BufferInfo();
-    private final int colorFormat;
     private final String codecName;
     private MediaCodec vencoder;
 
@@ -78,6 +82,7 @@ public class SrsAvcEncoder {
     private HandlerThread videoThread;
 
     private MediaCodec.Callback handler;
+
 
     /**
      * Implements an AVC encoder
@@ -123,13 +128,27 @@ public class SrsAvcEncoder {
 //        setEncoderPreset("veryfast");
 
         MediaCodecList list = new MediaCodecList(MediaCodecList.REGULAR_CODECS);
-        colorFormat = MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Planar;
-        mediaFormat = MediaFormat.createVideoFormat(CODEC, outWidth, outHeight);
-        mediaFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT, colorFormat);
-        mediaFormat.setInteger(MediaFormat.KEY_BIT_RATE, vBitrate);
-        mediaFormat.setInteger(MediaFormat.KEY_FRAME_RATE, vFps);
-        mediaFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, vGop / vFps);
+        mediaFormat = getMediaFormat(outWidth, outHeight, vFps, vGop, vBitrate);
         codecName = list.findEncoderForFormat(mediaFormat);
+    }
+
+    /**
+     * Return media format for video streaming
+     *
+     * @param width   Width in pixels
+     * @param height  Height in pixels
+     * @param fps     Frames Per Second
+     * @param gop     Group Of Picture in frames
+     * @param bitrate Bitrate in kbps
+     * @return Mediaformat for video streaming
+     */
+    public static MediaFormat getMediaFormat(int width, int height, int fps, int gop, int bitrate) {
+        MediaFormat mediaFormat = MediaFormat.createVideoFormat(CODEC, width, height);
+        mediaFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT, DEFAULT_COLOR_FORMAT);
+        mediaFormat.setInteger(MediaFormat.KEY_BIT_RATE, bitrate);
+        mediaFormat.setInteger(MediaFormat.KEY_FRAME_RATE, fps);
+        mediaFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, gop / fps);
+        return mediaFormat;
     }
 
     /**
@@ -225,7 +244,7 @@ public class SrsAvcEncoder {
     }
 
     public byte[] RGBAtoYUV(byte[] data, int width, int height) {
-        switch (colorFormat) {
+        switch (DEFAULT_COLOR_FORMAT) {
             case MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Planar:
                 return RGBAToI420(data, width, height, true, rotateFlip);
             case MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar:
@@ -236,7 +255,7 @@ public class SrsAvcEncoder {
     }
 
     public byte[] NV21toYUV(byte[] data, int width, int height, Rect boundingBox) {
-        switch (colorFormat) {
+        switch (DEFAULT_COLOR_FORMAT) {
             case MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Planar:
                 return NV21ToI420(data, width, height, true, rotateFlip, boundingBox.left, boundingBox.top, boundingBox.width(), boundingBox.height());
             case MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar:
@@ -280,7 +299,7 @@ public class SrsAvcEncoder {
     }
 
     public byte[] ARGBtoYUV(int[] data, int width, int height, Rect boundingBox) {
-        switch (colorFormat) {
+        switch (DEFAULT_COLOR_FORMAT) {
             case MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Planar:
                 return ARGBToI420(data, width, height, false, rotate, boundingBox.left, boundingBox.top, boundingBox.width(), boundingBox.height());
             case MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar:
