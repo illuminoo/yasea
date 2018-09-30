@@ -214,6 +214,8 @@ public class SrsFlvMuxer {
      * stop the muxer, disconnect RTMP connection.
      */
     public void stop() {
+        mFlvTagCache.clear();
+        worker.interrupt();
         worker = null;
     }
 
