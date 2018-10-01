@@ -5,6 +5,9 @@
  */
 package net.ossrs.yasea;
 
+/**
+ * Implements an audio/video frame
+ */
 public class Frame {
 
     /**
@@ -18,7 +21,7 @@ public class Frame {
     public long timestamp;
 
     /**
-     * Encoded video data
+     * Encoded frame
      */
-    public byte[] video;
+    public byte[] data;
 }

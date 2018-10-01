@@ -155,11 +155,11 @@ public class RtmpHeader {
             return value;
         }
 
-        public static MessageType valueOf(byte messageTypeId) {
+        public static MessageType valueOf(byte messageTypeId) throws IOException {
             if (quickLookupMap.containsKey(messageTypeId)) {
                 return quickLookupMap.get(messageTypeId);
             } else {
-                throw new IllegalArgumentException("Unknown message type byte: " + Util.toHexString(messageTypeId));
+                throw new IOException("Unknown message type byte: " + Util.toHexString(messageTypeId));
             }
         }
     }
