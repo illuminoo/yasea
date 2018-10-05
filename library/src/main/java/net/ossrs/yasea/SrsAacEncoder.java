@@ -106,7 +106,7 @@ public class SrsAacEncoder {
         // Start Audio encoder
         aencoder = MediaCodec.createByCodecName(codecName);
         aencoder.configure(mediaFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
-        if (handler!=null) {
+        if (handler != null) {
             audioThread = new HandlerThread("Audio");
             audioThread.start();
             aencoder.setCallback(handler, new Handler(audioThread.getLooper()));
@@ -154,36 +154,32 @@ public class SrsAacEncoder {
         }
     }
 
+    /**
+     * Capture audio frames
+     */
     public void captureAudio() {
         int inBufferIndex = aencoder.dequeueInputBuffer(0);
         if (inBufferIndex >= 0) {
-            onInputBufferAvailable(aencoder, inBufferIndex);
-        }
-    }
-
-//    public void muxAudio() {
-//        int outBufferIndex = aencoder.dequeueOutputBuffer(aebi, 0);
-//        while (outBufferIndex >= 0) {
-//            onOutputBufferAvailable(aencoder, outBufferIndex, aebi);
-//            outBufferIndex = aencoder.dequeueOutputBuffer(aebi, 0);
-//        }
-//    }
-
-//    @Override
-    public void onInputBufferAvailable(MediaCodec codec, int index) {
-        try {
-            long pts = System.nanoTime() / 1000;
-            int size = mic.read(mPcmBuffer, 0, mPcmBuffer.length);
-            if (size > 0) {
-                ByteBuffer bb = codec.getInputBuffer(index);
-                bb.put(mPcmBuffer, 0, size);
-                codec.queueInputBuffer(index, 0, size, pts, 0);
+            try {
+                long pts = System.nanoTime() / 1000;
+                int size = mic.read(mPcmBuffer, 0, mPcmBuffer.length);
+                if (size > 0) {
+                    ByteBuffer bb = aencoder.getInputBuffer(inBufferIndex);
+                    bb.put(mPcmBuffer, 0, size);
+                    aencoder.queueInputBuffer(inBufferIndex, 0, size, pts, 0);
+                }
+            } catch (IllegalStateException e) {
+                // Ignore
             }
-        } catch (IllegalStateException e) {
-            // Ignore
         }
     }
 
+    /**
+     * Get encoded AAC data
+     *
+     * @param frame Destination frame
+     * @return Destination frame set successfully
+     */
     public boolean getAAC(Frame frame) {
         int outBufferIndex = aencoder.dequeueOutputBuffer(aebi, 0);
         if (outBufferIndex >= 0) {
@@ -195,12 +191,5 @@ public class SrsAacEncoder {
             return true;
         }
         return false;
-    }
-
-    /**
-     * @return Audio output format
-     */
-    public MediaFormat getOutputFormat() {
-        return aencoder.getOutputFormat();
     }
 }

@@ -128,7 +128,7 @@ public class SrsAvcEncoder {
 //        setEncoderPreset("veryfast");
 
         MediaCodecList list = new MediaCodecList(MediaCodecList.REGULAR_CODECS);
-        mediaFormat = getMediaFormat(outWidth, outHeight, vFps, vGop, vBitrate);
+        mediaFormat = getMediaFormat(outWidth, outHeight, vFps, vBitrate);
         codecName = list.findEncoderForFormat(mediaFormat);
     }
 
@@ -138,16 +138,15 @@ public class SrsAvcEncoder {
      * @param width   Width in pixels
      * @param height  Height in pixels
      * @param fps     Frames Per Second
-     * @param gop     Group Of Picture in frames
      * @param bitrate Bitrate in kbps
      * @return Mediaformat for video streaming
      */
-    public static MediaFormat getMediaFormat(int width, int height, int fps, int gop, int bitrate) {
+    public static MediaFormat getMediaFormat(int width, int height, int fps, int bitrate) {
         MediaFormat mediaFormat = MediaFormat.createVideoFormat(CODEC, width, height);
         mediaFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT, DEFAULT_COLOR_FORMAT);
         mediaFormat.setInteger(MediaFormat.KEY_BIT_RATE, bitrate);
         mediaFormat.setInteger(MediaFormat.KEY_FRAME_RATE, fps);
-        mediaFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, gop / fps);
+        mediaFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 2);
         return mediaFormat;
     }
 
