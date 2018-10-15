@@ -3,7 +3,6 @@ package net.ossrs.yasea;
 import android.media.MediaCodec;
 import android.media.MediaFormat;
 import android.util.Log;
-
 import com.github.faucamp.simplertmp.DefaultRtmpPublisher;
 import com.github.faucamp.simplertmp.RtmpHandler;
 
@@ -182,7 +181,7 @@ public class SrsFlvMuxer {
             disconnect();
             Log.i(TAG, "SrsFlvMuxer stopped");
         });
-        worker.setPriority(Thread.MAX_PRIORITY);
+//        worker.setPriority(Thread.MAX_PRIORITY);
         worker.setDaemon(true);
         worker.start();
     }
