@@ -6,12 +6,7 @@
 
 package net.ossrs.yasea;
 
-import android.media.AudioFormat;
-import android.media.AudioRecord;
-import android.media.MediaCodec;
-import android.media.MediaCodecList;
-import android.media.MediaFormat;
-import android.media.MediaRecorder;
+import android.media.*;
 import android.media.audiofx.AcousticEchoCanceler;
 import android.media.audiofx.AutomaticGainControl;
 import android.os.Handler;
@@ -71,7 +66,7 @@ public class SrsAacEncoder {
         this.handler = handler;
 
         mPcmBufferSize = AudioRecord.getMinBufferSize(ASAMPLERATE, AudioFormat.CHANNEL_IN_STEREO,
-                AudioFormat.ENCODING_PCM_16BIT) * 4;
+                AudioFormat.ENCODING_PCM_16BIT) * 16;
         mPcmBuffer = new byte[mPcmBufferSize];
 
         MediaCodecList list = new MediaCodecList(MediaCodecList.REGULAR_CODECS);
