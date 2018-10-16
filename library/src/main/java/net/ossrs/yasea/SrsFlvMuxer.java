@@ -214,8 +214,10 @@ public class SrsFlvMuxer {
      */
     public void stop() {
         mFlvTagCache.clear();
-        worker.interrupt();
-        worker = null;
+        if (worker != null) {
+            worker.interrupt();
+            worker = null;
+        }
     }
 
     /**
