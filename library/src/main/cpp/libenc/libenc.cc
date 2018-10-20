@@ -213,23 +213,37 @@ YUV420_888toI420(uint8_t *src_y, jint y_stride,
         i420_src_frame.height = src_height;
     }
 
-    ret = Android420ToI420(src_y, y_stride,
-                            src_u, u_stride,
-                            src_v, v_stride,
-                            uv_stride,
-                            i420_src_frame.y, i420_src_frame.width,
-                            i420_src_frame.u, i420_src_frame.width/2,
-                            i420_src_frame.v, i420_src_frame.width/2,
-                            i420_src_frame.width,
-                            i420_src_frame.height);
-
-    if (ret < 0) {
-        LIBENC_LOGE("Android420ToI420 failure");
-        return false;
+    int i = 0;
+    int j;
+    int halfwidth = src_width / 2;
+    int halfheight = src_height / 2;
+    i420_src_frame.y = src_y;
+    for (int y = 0; y < halfheight; y++) {
+        for (int x = 0; x < halfwidth; x++) {
+            j = y * src_width + x * 2;
+            i420_src_frame.u[i] = src_u[j];
+            i420_src_frame.v[i] = src_v[j];
+            i++;
+        }
     }
 
+//    ret = Android420ToI420(src_y, y_stride,
+//                            src_u, u_stride,
+//                            src_v, v_stride,
+//                            uv_stride,
+//                            i420_src_frame.y, i420_src_frame.width,
+//                            i420_src_frame.u, i420_src_frame.width/2,
+//                            i420_src_frame.v, i420_src_frame.width/2,
+//                            i420_src_frame.width,
+//                            i420_src_frame.height);
+//
+//    if (ret < 0) {
+//        LIBENC_LOGE("Android420ToI420 failure");
+//        return false;
+//    }
+
     // Crop frame
-    const int j = src_width * (crop_y >> 2) + (crop_x >> 1);
+    j = src_width * (crop_y >> 2) + (crop_x >> 1);
     const uint8 *src_yc = i420_src_frame.y + (i420_src_frame.width * crop_y + crop_x);
     const uint8 *src_uc = i420_src_frame.u + j;
     const uint8 *src_vc = i420_src_frame.v + j;
