@@ -3,7 +3,6 @@ package net.ossrs.yasea;
 import android.media.MediaCodec;
 import android.media.MediaFormat;
 import android.util.Log;
-
 import com.github.faucamp.simplertmp.DefaultRtmpPublisher;
 import com.github.faucamp.simplertmp.RtmpHandler;
 
@@ -215,8 +214,10 @@ public class SrsFlvMuxer {
      */
     public void stop() {
         mFlvTagCache.clear();
-        worker.interrupt();
-        worker = null;
+        if (worker != null) {
+            worker.interrupt();
+            worker = null;
+        }
     }
 
     /**

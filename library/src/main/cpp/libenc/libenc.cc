@@ -201,7 +201,7 @@ YUV420_888toI420(uint8_t *src_y, jint y_stride,
         r_crop_height = crop_width;
     }
 
-    // Convert pixel stride of 2 to 1 for UV planes
+    // Convert pixel stride for Android
     if (i420_src_frame.width != src_width || i420_src_frame.height != src_height) {
         free(i420_src_frame.data);
         i420_src_frame.data = (uint8_t *) malloc(y_size * 3 / 2);
@@ -212,6 +212,7 @@ YUV420_888toI420(uint8_t *src_y, jint y_stride,
         i420_src_frame.width = src_width;
         i420_src_frame.height = src_height;
     }
+
     int i = 0;
     int j;
     int halfwidth = src_width / 2;
@@ -225,15 +226,16 @@ YUV420_888toI420(uint8_t *src_y, jint y_stride,
             i++;
         }
     }
+
 //    ret = Android420ToI420(src_y, y_stride,
-//                                src_u, u_stride,
-//                                src_v, v_stride,
-//                                uv_stride,
-//                                i420_src_frame.y, i420_src_frame.width,
-//                                i420_src_frame.u, i420_src_frame.width / 2,
-//                                i420_src_frame.v, i420_src_frame.width / 2,
-//                                i420_src_frame.width,
-//                                i420_src_frame.height);
+//                            src_u, u_stride,
+//                            src_v, v_stride,
+//                            uv_stride,
+//                            i420_src_frame.y, i420_src_frame.width,
+//                            i420_src_frame.u, i420_src_frame.width/2,
+//                            i420_src_frame.v, i420_src_frame.width/2,
+//                            i420_src_frame.width,
+//                            i420_src_frame.height);
 //
 //    if (ret < 0) {
 //        LIBENC_LOGE("Android420ToI420 failure");
