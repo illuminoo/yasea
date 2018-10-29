@@ -66,7 +66,7 @@ public class SrsAacEncoder {
         this.handler = handler;
 
         mPcmBufferSize = AudioRecord.getMinBufferSize(ASAMPLERATE, AudioFormat.CHANNEL_IN_STEREO,
-                AudioFormat.ENCODING_PCM_16BIT) * 16;
+                AudioFormat.ENCODING_PCM_16BIT) * 4;
         mPcmBuffer = new byte[mPcmBufferSize];
 
         MediaCodecList list = new MediaCodecList(MediaCodecList.REGULAR_CODECS);
