@@ -10,11 +10,7 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Rect;
-import android.media.Image;
-import android.media.MediaCodec;
-import android.media.MediaCodecInfo;
-import android.media.MediaCodecList;
-import android.media.MediaFormat;
+import android.media.*;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.util.Log;
@@ -220,7 +216,7 @@ public class SrsAvcEncoder {
         ByteBuffer bb = vencoder.getOutputBuffer(index);
         frame.data = new byte[info.size];
         bb.get(frame.data, 0, info.size);
-        frame.keyframe = (info.flags & MediaCodec.BUFFER_FLAG_KEY_FRAME) != 0;
+        frame.flags = info.flags;
         frame.timestamp = info.presentationTimeUs;
         vencoder.releaseOutputBuffer(index, false);
         return true;
@@ -234,8 +230,8 @@ public class SrsAvcEncoder {
         encodeYuvFrame(NV21toYUV(data, width, height, boundingBox));
     }
 
-    public void onGetYUV420_888Frame(Image image, Rect boundingBox, long pts) {
-        encodeYuvFrame(YUV420_888toYUV(image, boundingBox), pts);
+    public void onGetYUV420_888Frame(Image image, Rect boundingBox) {
+        encodeYuvFrame(YUV420_888toYUV(image, boundingBox), image.getTimestamp() / 1000);
     }
 
     public void onGetArgbFrame(int[] data, int width, int height, Rect boundingBox) {

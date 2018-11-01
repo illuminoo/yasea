@@ -182,6 +182,7 @@ public class SrsAacEncoder {
         int outBufferIndex = aencoder.dequeueOutputBuffer(aebi, 0);
         if (outBufferIndex >= 0) {
             ByteBuffer bb = aencoder.getOutputBuffer(outBufferIndex);
+            frame.flags = aebi.flags;
             frame.timestamp = aebi.presentationTimeUs;
             frame.data = new byte[aebi.size];
             bb.get(frame.data);
