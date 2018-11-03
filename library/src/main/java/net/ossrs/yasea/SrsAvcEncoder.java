@@ -230,8 +230,8 @@ public class SrsAvcEncoder {
         encodeYuvFrame(NV21toYUV(data, width, height, boundingBox));
     }
 
-    public void onGetYUV420_888Frame(Image image, Rect boundingBox) {
-        encodeYuvFrame(YUV420_888toYUV(image, boundingBox), image.getTimestamp() / 1000);
+    public void onGetYUV420_888Frame(Image image, Rect boundingBox, long pts) {
+        encodeYuvFrame(YUV420_888toYUV(image, boundingBox), pts);
     }
 
     public void onGetArgbFrame(int[] data, int width, int height, Rect boundingBox) {
