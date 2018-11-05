@@ -1,31 +1,12 @@
 package com.github.faucamp.simplertmp.io;
 
 import android.util.Log;
-
 import com.github.faucamp.simplertmp.RtmpHandler;
 import com.github.faucamp.simplertmp.RtmpPublisher;
-import com.github.faucamp.simplertmp.amf.AmfMap;
-import com.github.faucamp.simplertmp.amf.AmfNull;
-import com.github.faucamp.simplertmp.amf.AmfNumber;
-import com.github.faucamp.simplertmp.amf.AmfObject;
-import com.github.faucamp.simplertmp.amf.AmfString;
-import com.github.faucamp.simplertmp.packets.Abort;
-import com.github.faucamp.simplertmp.packets.Audio;
-import com.github.faucamp.simplertmp.packets.Command;
-import com.github.faucamp.simplertmp.packets.Data;
-import com.github.faucamp.simplertmp.packets.Handshake;
-import com.github.faucamp.simplertmp.packets.RtmpPacket;
-import com.github.faucamp.simplertmp.packets.SetPeerBandwidth;
-import com.github.faucamp.simplertmp.packets.UserControl;
-import com.github.faucamp.simplertmp.packets.Video;
-import com.github.faucamp.simplertmp.packets.WindowAckSize;
+import com.github.faucamp.simplertmp.amf.*;
+import com.github.faucamp.simplertmp.packets.*;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
-import java.io.EOFException;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
+import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketAddress;
@@ -297,9 +278,9 @@ public class RtmpConnection implements RtmpPublisher {
         ecmaArray.setProperty("duration", 0);
         ecmaArray.setProperty("width", videoWidth);
         ecmaArray.setProperty("height", videoHeight);
-        ecmaArray.setProperty("videodatarate", 0);
-        ecmaArray.setProperty("framerate", 0);
-        ecmaArray.setProperty("audiodatarate", 0);
+        ecmaArray.setProperty("videodatarate", 50);
+        ecmaArray.setProperty("framerate", 25);
+        ecmaArray.setProperty("audiodatarate", 128);
         ecmaArray.setProperty("audiosamplerate", 44100);
         ecmaArray.setProperty("audiosamplesize", 16);
         ecmaArray.setProperty("stereo", true);

@@ -5,15 +5,17 @@
  */
 package net.ossrs.yasea;
 
+import android.media.MediaCodec;
+
 /**
  * Implements an audio/video frame
  */
 public class Frame {
 
     /**
-     * Key frame
+     * Flags
      */
-    public boolean keyframe;
+    public int flags;
 
     /**
      * Timestamp
@@ -24,4 +26,11 @@ public class Frame {
      * Encoded frame
      */
     public byte[] data;
+
+    /**
+     * @return Is key frame
+     */
+    public boolean isKeyframe() {
+        return (flags & MediaCodec.BUFFER_FLAG_KEY_FRAME) != 0;
+    }
 }

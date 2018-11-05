@@ -32,6 +32,7 @@ public class SrsAacEncoder {
 
     public final MediaFormat mediaFormat;
     private final String codecName;
+    private final int source;
 
     private MediaCodec aencoder;
     private MediaCodec.BufferInfo aebi = new MediaCodec.BufferInfo();
@@ -60,13 +61,15 @@ public class SrsAacEncoder {
     /**
      * Constructor
      *
+     * @param source Audio source
      * @param handler Codec handler
      */
-    public SrsAacEncoder(MediaCodec.Callback handler) {
+    public SrsAacEncoder(int source, MediaCodec.Callback handler) {
         this.handler = handler;
+        this.source = source;
 
         mPcmBufferSize = AudioRecord.getMinBufferSize(ASAMPLERATE, AudioFormat.CHANNEL_IN_STEREO,
-                AudioFormat.ENCODING_PCM_16BIT) * 16;
+                AudioFormat.ENCODING_PCM_16BIT) * 4;
         mPcmBuffer = new byte[mPcmBufferSize];
 
         MediaCodecList list = new MediaCodecList(MediaCodecList.REGULAR_CODECS);
@@ -84,7 +87,7 @@ public class SrsAacEncoder {
     public void start() throws IOException {
 
         // Prepare microphone
-        mic = new AudioRecord(MediaRecorder.AudioSource.DEFAULT, SrsAacEncoder.ASAMPLERATE,
+        mic = new AudioRecord(source, SrsAacEncoder.ASAMPLERATE,
                 AudioFormat.CHANNEL_IN_STEREO, AudioFormat.ENCODING_PCM_16BIT, mPcmBufferSize);
 
         if (AcousticEchoCanceler.isAvailable()) {
@@ -179,6 +182,7 @@ public class SrsAacEncoder {
         int outBufferIndex = aencoder.dequeueOutputBuffer(aebi, 0);
         if (outBufferIndex >= 0) {
             ByteBuffer bb = aencoder.getOutputBuffer(outBufferIndex);
+            frame.flags = aebi.flags;
             frame.timestamp = aebi.presentationTimeUs;
             frame.data = new byte[aebi.size];
             bb.get(frame.data);
