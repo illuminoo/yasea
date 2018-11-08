@@ -143,6 +143,7 @@ public class SrsAvcEncoder {
         mediaFormat.setInteger(MediaFormat.KEY_BIT_RATE, bitrate);
         mediaFormat.setInteger(MediaFormat.KEY_FRAME_RATE, fps);
         mediaFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 2);
+        mediaFormat.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 0);
         return mediaFormat;
     }
 
