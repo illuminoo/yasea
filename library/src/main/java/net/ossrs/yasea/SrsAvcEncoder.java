@@ -10,10 +10,7 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Rect;
-import android.media.MediaCodec;
-import android.media.MediaCodecInfo;
-import android.media.MediaCodecList;
-import android.media.MediaFormat;
+import android.media.*;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.util.Log;
@@ -65,6 +62,14 @@ public class SrsAvcEncoder {
     private int rotate = 0;
     private int rotateFlip = 180;
 
+    private int y_rowstride;
+    private int u_rowstride;
+    private int v_rowstride;
+    private int pixelstride;
+
+    private final byte[] y_frame;
+    private final byte[] u_frame;
+    private final byte[] v_frame;
     private final int[] argb_frame;
 
     private final Bitmap overlayBitmap;
@@ -91,6 +96,9 @@ public class SrsAvcEncoder {
         // Prepare input
         this.inWidth = inWidth;
         this.inHeight = inHeight;
+        y_frame = new byte[inWidth * inHeight];
+        u_frame = new byte[(inWidth * inHeight) / 2 - 1];
+        v_frame = new byte[(inWidth * inHeight) / 2 - 1];
 
         // Prepare video overlay
         overlayBitmap = Bitmap.createBitmap(outWidth, outHeight, Bitmap.Config.ARGB_8888);
@@ -222,10 +230,8 @@ public class SrsAvcEncoder {
         encodeYuvFrame(NV21toYUV(data, width, height, boundingBox));
     }
 
-    public void onGetYUV420_888Frame(byte[] y_frame, byte[] u_frame, byte[] v_frame,
-                                     int y_rowstride, int u_rowstride, int v_rowstride, int pixelstride, Rect boundingBox, long pts) {
-
-        encodeYuvFrame(YUV420_888toYUV(y_frame, u_frame, v_frame, y_rowstride, u_rowstride, v_rowstride, pixelstride, boundingBox), pts);
+    public void onGetYUV420_888Frame(Image image, Rect boundingBox, long pts) {
+        encodeYuvFrame(YUV420_888toYUV(image, boundingBox), pts);
     }
 
     public void onGetArgbFrame(int[] data, int width, int height, Rect boundingBox) {
@@ -254,7 +260,17 @@ public class SrsAvcEncoder {
         }
     }
 
-    public byte[] YUV420_888toYUV(byte[] y_frame, byte[] u_frame, byte[] v_frame, int y_rowstride, int u_rowstride, int v_rowstride, int pixelstride, Rect cropArea) {
+    public byte[] YUV420_888toYUV(Image image, Rect cropArea) {
+        if (image != null) {
+            Image.Plane[] planes = image.getPlanes();
+            y_rowstride = planes[0].getRowStride();
+            u_rowstride = planes[1].getRowStride();
+            v_rowstride = planes[2].getRowStride();
+            pixelstride = planes[2].getPixelStride();
+            planes[0].getBuffer().get(y_frame);
+            planes[1].getBuffer().get(u_frame);
+            planes[2].getBuffer().get(v_frame);
+        }
         return YUV420_888toI420(y_frame, y_rowstride,
                 u_frame, u_rowstride,
                 v_frame, v_rowstride,
