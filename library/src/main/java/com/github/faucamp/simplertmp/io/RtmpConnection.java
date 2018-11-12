@@ -19,15 +19,15 @@ import java.util.regex.Pattern;
 
 /**
  * Main RTMP connection implementation class
- * 
+ *
  * @author francois, leoma
  */
 public class RtmpConnection implements RtmpPublisher {
 
-    private static final String TAG = "RtmpConnection";
+    protected static final String TAG = "RtmpConnection";
     private static final Pattern rtmpUrlPattern = Pattern.compile("^rtmp://([^/:]+)(:(\\d+))*/([^/]+)(/(.*))*$");
 
-    private RtmpHandler mHandler;
+    protected RtmpHandler mHandler;
     private int port;
     private String host;
     private String appName;
@@ -54,8 +54,8 @@ public class RtmpConnection implements RtmpPublisher {
     private AmfString serverIpAddr;
     private AmfNumber serverPid;
     private AmfNumber serverId;
-    private int videoWidth;
-    private int videoHeight;
+    protected int videoWidth;
+    protected int videoHeight;
     private int videoFrameCount;
     private int videoDataLength;
     private int audioFrameCount;
@@ -92,13 +92,13 @@ public class RtmpConnection implements RtmpPublisher {
             streamName = matcher.group(6);
         } else {
             mHandler.notifyRtmpIllegalArgumentException(new IllegalArgumentException(
-                "Invalid RTMP URL. Must be in format: rtmp://host[:port]/application/streamName"));
+                    "Invalid RTMP URL. Must be in format: rtmp://host[:port]/application/streamName"));
             return false;
         }
 
         if (streamName == null || appName == null) {
             mHandler.notifyRtmpIllegalArgumentException(new IllegalArgumentException(
-                "Invalid RTMP URL. Must be in format: rtmp://host[:port]/application/streamName"));
+                    "Invalid RTMP URL. Must be in format: rtmp://host[:port]/application/streamName"));
             return false;
         }
 
@@ -260,29 +260,25 @@ public class RtmpConnection implements RtmpPublisher {
         sendRtmpPacket(publish);
     }
 
-    private void onMetaData() {
-        if (!connected) {
-            mHandler.notifyRtmpIllegalStateException(new IllegalStateException("Not connected to RTMP server"));
-            return;
-        }
-        if (currentStreamId == 0) {
-            mHandler.notifyRtmpIllegalStateException(new IllegalStateException("No current stream object exists"));
-            return;
-        }
-
+    /**
+     * Called when meta data is requested
+     *
+     * @param streamId Stream ID
+     */
+    protected void onMetaData(int streamId) {
         Log.d(TAG, "onMetaData(): Sending empty onMetaData...");
         Data metadata = new Data("@setDataFrame");
-        metadata.getHeader().setMessageStreamId(currentStreamId);
+        metadata.getHeader().setMessageStreamId(streamId);
         metadata.addData("onMetaData");
         AmfMap ecmaArray = new AmfMap();
         ecmaArray.setProperty("duration", 0);
         ecmaArray.setProperty("width", videoWidth);
         ecmaArray.setProperty("height", videoHeight);
-        ecmaArray.setProperty("videodatarate", 50);
-        ecmaArray.setProperty("framerate", 25);
-        ecmaArray.setProperty("audiodatarate", 128);
-        ecmaArray.setProperty("audiosamplerate", 44100);
-        ecmaArray.setProperty("audiosamplesize", 16);
+        ecmaArray.setProperty("videodatarate", 0);
+        ecmaArray.setProperty("framerate", 0);
+        ecmaArray.setProperty("audiodatarate", 0);
+        ecmaArray.setProperty("audiosamplerate", 0);
+        ecmaArray.setProperty("audiosamplesize", 0);
         ecmaArray.setProperty("stereo", true);
         ecmaArray.setProperty("filesize", 0);
         metadata.addData(ecmaArray);
@@ -463,7 +459,7 @@ public class RtmpConnection implements RtmpPublisher {
         }
     }
 
-    private void sendRtmpPacket(RtmpPacket rtmpPacket) {
+    protected void sendRtmpPacket(RtmpPacket rtmpPacket) {
         try {
             ChunkStreamInfo chunkStreamInfo = rtmpSessionInfo.getChunkStreamInfo(rtmpPacket.getHeader().getChunkStreamId());
             chunkStreamInfo.setPrevHeaderTx(rtmpPacket.getHeader());
@@ -598,7 +594,17 @@ public class RtmpConnection implements RtmpPublisher {
             String code = ((AmfString) ((AmfObject) invoke.getData().get(1)).getProperty("code")).getValue();
             Log.d(TAG, "handleRxInvoke(): onStatus " + code);
             if (code.equals("NetStream.Publish.Start")) {
-                onMetaData();
+                if (!connected) {
+                    mHandler.notifyRtmpIllegalStateException(new IllegalStateException("Not connected to RTMP server"));
+                    return;
+                }
+                if (currentStreamId == 0) {
+                    mHandler.notifyRtmpIllegalStateException(new IllegalStateException("No current stream object exists"));
+                    return;
+                }
+
+                onMetaData(currentStreamId);
+
                 // We can now publish AV data
                 publishPermitted = true;
                 synchronized (publishLock) {

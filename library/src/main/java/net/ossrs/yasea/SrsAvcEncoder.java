@@ -79,7 +79,6 @@ public class SrsAvcEncoder {
 
     private MediaCodec.Callback handler;
 
-
     /**
      * Implements an AVC encoder
      *

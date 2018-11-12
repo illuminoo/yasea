@@ -3,7 +3,6 @@ package net.ossrs.yasea;
 import android.media.MediaCodec;
 import android.media.MediaFormat;
 import android.util.Log;
-import com.github.faucamp.simplertmp.DefaultRtmpPublisher;
 import com.github.faucamp.simplertmp.RtmpHandler;
 
 import java.nio.ByteBuffer;
@@ -24,7 +23,7 @@ public class SrsFlvMuxer {
     private static final int AUDIO_ALLOC_SIZE = 4 * 1024;
 
     private volatile boolean connected = false;
-    private DefaultRtmpPublisher publisher;
+    private SrsRtmpPublisher publisher;
     private RtmpHandler mHandler;
 
     private Thread worker;
@@ -49,7 +48,7 @@ public class SrsFlvMuxer {
      */
     public SrsFlvMuxer(RtmpHandler handler) {
         mHandler = handler;
-        publisher = new DefaultRtmpPublisher(handler);
+        publisher = new SrsRtmpPublisher(handler);
     }
 
     /**
@@ -80,9 +79,11 @@ public class SrsFlvMuxer {
     public int addTrack(MediaFormat format) {
         if (format.getString(MediaFormat.KEY_MIME).contentEquals(SrsEncoder.VCODEC)) {
             flv.setVideoTrack(format);
+            publisher.setVideoFormat(format);
             return VIDEO_TRACK;
         } else {
             flv.setAudioTrack(format);
+            publisher.setAudioFormat(format);
             return AUDIO_TRACK;
         }
     }
