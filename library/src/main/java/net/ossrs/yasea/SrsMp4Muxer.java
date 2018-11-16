@@ -3,34 +3,10 @@ package net.ossrs.yasea;
 import android.media.MediaCodec;
 import android.media.MediaFormat;
 import android.util.Log;
-
 import com.coremedia.iso.BoxParser;
 import com.coremedia.iso.IsoFile;
 import com.coremedia.iso.IsoTypeWriter;
-import com.coremedia.iso.boxes.AbstractMediaHeaderBox;
-import com.coremedia.iso.boxes.Box;
-import com.coremedia.iso.boxes.ContainerBox;
-import com.coremedia.iso.boxes.DataEntryUrlBox;
-import com.coremedia.iso.boxes.DataInformationBox;
-import com.coremedia.iso.boxes.DataReferenceBox;
-import com.coremedia.iso.boxes.FileTypeBox;
-import com.coremedia.iso.boxes.HandlerBox;
-import com.coremedia.iso.boxes.MediaBox;
-import com.coremedia.iso.boxes.MediaHeaderBox;
-import com.coremedia.iso.boxes.MediaInformationBox;
-import com.coremedia.iso.boxes.MovieBox;
-import com.coremedia.iso.boxes.MovieHeaderBox;
-import com.coremedia.iso.boxes.SampleDescriptionBox;
-import com.coremedia.iso.boxes.SampleSizeBox;
-import com.coremedia.iso.boxes.SampleTableBox;
-import com.coremedia.iso.boxes.SampleToChunkBox;
-import com.coremedia.iso.boxes.SoundMediaHeaderBox;
-import com.coremedia.iso.boxes.StaticChunkOffsetBox;
-import com.coremedia.iso.boxes.SyncSampleBox;
-import com.coremedia.iso.boxes.TimeToSampleBox;
-import com.coremedia.iso.boxes.TrackBox;
-import com.coremedia.iso.boxes.TrackHeaderBox;
-import com.coremedia.iso.boxes.VideoMediaHeaderBox;
+import com.coremedia.iso.boxes.*;
 import com.coremedia.iso.boxes.h264.AvcConfigurationBox;
 import com.coremedia.iso.boxes.sampleentry.AudioSampleEntry;
 import com.coremedia.iso.boxes.sampleentry.VisualSampleEntry;
@@ -49,12 +25,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.WritableByteChannel;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 /**
@@ -131,35 +102,32 @@ public class SrsMp4Muxer {
         }
         mp4Movie.addTrack(audioFormat, true);
 
-        worker = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                bRecording = true;
-                while (bRecording) {
+        worker = new Thread(() -> {
+            bRecording = true;
+            while (bRecording) {
 
-                    // Keep at least one audio and video frame in cache to ensure monotonically increasing.
-                    while (!frameCache.isEmpty()) {
-                        SrsEsFrame frame = frameCache.poll();
-                        writeSampleData(frame.bb, frame.bi, frame.is_audio());
-                    }
-
-                    // Waiting for next frame
-                    synchronized (writeLock) {
-                        try {
-                            // isEmpty() may take some time, so we set timeout to detect next frame
-                            writeLock.wait(500);
-                        } catch (InterruptedException ie) {
-                            worker = null;
-                            bRecording = false;
-                        }
-                    }
+                // Keep at least one audio and video frame in cache to ensure monotonically increasing.
+                while (!frameCache.isEmpty()) {
+                    SrsEsFrame frame = frameCache.poll();
+                    writeSampleData(frame.bb, frame.bi, frame.is_audio());
                 }
 
-                finishMovie();
-                mHandler.notifyRecordFinished(mRecFile.getPath());
-                Log.i(TAG, "SrsMp4Muxer stopped");
-                worker = null;
+                // Waiting for next frame
+                synchronized (writeLock) {
+                    try {
+                        // isEmpty() may take some time, so we set timeout to detect next frame
+                        writeLock.wait(500);
+                    } catch (InterruptedException ie) {
+                        worker = null;
+                        bRecording = false;
+                    }
+                }
             }
+
+            finishMovie();
+            mHandler.notifyRecordFinished(mRecFile.getPath());
+            Log.i(TAG, "SrsMp4Muxer stopped");
+            worker = null;
         });
         worker.start();
 

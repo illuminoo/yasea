@@ -437,7 +437,7 @@ public class SrsFlvMuxer {
     /**
      * the muxed flv frame.
      */
-    private class SrsFlvFrame {
+    public class SrsFlvFrame {
         // the tag bytes.
         public SrsAllocator.Allocation flvTag;
         // the codec type for audio/aac and video/avc for instance.
