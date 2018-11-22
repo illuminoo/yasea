@@ -33,9 +33,9 @@ public class SrsFlvMuxer {
     public boolean needToFindKeyFrame = true;
     private SrsFlvFrame mVideoSequenceHeader;
     private SrsFlvFrame mAudioSequenceHeader;
-    private SrsAllocator mVideoAllocator = new SrsAllocator(VIDEO_ALLOC_SIZE);
-    private SrsAllocator mAudioAllocator = new SrsAllocator(AUDIO_ALLOC_SIZE);
-    private ConcurrentLinkedQueue<SrsFlvFrame> mFlvTagCache = new ConcurrentLinkedQueue<>();
+    private final SrsAllocator mVideoAllocator = new SrsAllocator(VIDEO_ALLOC_SIZE);
+    private final SrsAllocator mAudioAllocator = new SrsAllocator(AUDIO_ALLOC_SIZE);
+    private final ConcurrentLinkedQueue<SrsFlvFrame> mFlvTagCache = new ConcurrentLinkedQueue<>();
 
     public static final int VIDEO_TRACK = 100;
     public static final int AUDIO_TRACK = 101;
@@ -55,7 +55,7 @@ public class SrsFlvMuxer {
      * get cached video frame number in publisher
      */
     public AtomicInteger getVideoFrameCacheNumber() {
-        return publisher == null ? null : publisher.getVideoFrameCacheNumber();
+        return publisher.getVideoFrameCacheNumber();
     }
 
     /**
@@ -65,9 +65,7 @@ public class SrsFlvMuxer {
      * @param height height
      */
     public void setVideoResolution(int width, int height) {
-        if (publisher != null) {
-            publisher.setVideoResolution(width, height);
-        }
+        publisher.setVideoResolution(width, height);
     }
 
     /**
@@ -185,29 +183,6 @@ public class SrsFlvMuxer {
         worker.setPriority(Thread.MAX_PRIORITY);
         worker.setDaemon(true);
         worker.start();
-    }
-
-    /**
-     * Send all FLV tags from cache
-     */
-    public void sendFlvTags() {
-        SrsFlvFrame frame = mFlvTagCache.poll();
-        if (frame == null) return;
-        if (frame.isSequenceHeader()) {
-            if (frame.isVideo()) {
-                mVideoSequenceHeader = frame;
-                sendFlvTag(mVideoSequenceHeader);
-            } else if (frame.isAudio()) {
-                mAudioSequenceHeader = frame;
-                sendFlvTag(mAudioSequenceHeader);
-            }
-        } else {
-            if (frame.isVideo() && mVideoSequenceHeader != null) {
-                sendFlvTag(frame);
-            } else if (frame.isAudio() && mAudioSequenceHeader != null) {
-                sendFlvTag(frame);
-            }
-        }
     }
 
     /**
@@ -346,7 +321,7 @@ public class SrsFlvMuxer {
     /**
      * the aac profile, for ADTS(HLS/TS)
      *
-     * @see https://github.com/simple-rtmp-server/srs/issues/310
+     * see https://github.com/simple-rtmp-server/srs/issues/310
      */
     private class SrsAacProfile {
         public final static int Reserved = 3;
