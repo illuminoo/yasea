@@ -7,7 +7,7 @@ import com.github.faucamp.simplertmp.RtmpHandler;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -35,7 +35,12 @@ public class SrsFlvMuxer {
     private SrsFlvFrame mAudioSequenceHeader;
     private final SrsAllocator mVideoAllocator = new SrsAllocator(VIDEO_ALLOC_SIZE);
     private final SrsAllocator mAudioAllocator = new SrsAllocator(AUDIO_ALLOC_SIZE);
-    private final ConcurrentLinkedQueue<SrsFlvFrame> mFlvTagCache = new ConcurrentLinkedQueue<>();
+    private final ConcurrentSkipListSet<SrsFlvFrame> mFlvTagCache = new ConcurrentSkipListSet<>(
+            (frame1, frame2) -> {
+                if (frame1.dts < frame2.dts) return -1;
+                if (frame1.dts > frame2.dts) return 1;
+                return 0;
+            });
 
     public static final int VIDEO_TRACK = 100;
     public static final int AUDIO_TRACK = 101;
@@ -147,8 +152,8 @@ public class SrsFlvMuxer {
             Log.i(TAG, "SrsFlvMuxer connected");
 
             while (worker != null) {
-                while (!mFlvTagCache.isEmpty()) {
-                    SrsFlvFrame frame = mFlvTagCache.poll();
+                while (mFlvTagCache.size() >= 50) {
+                    SrsFlvFrame frame = mFlvTagCache.pollFirst();
                     if (frame.isSequenceHeader()) {
                         if (frame.isVideo()) {
                             mVideoSequenceHeader = frame;
