@@ -30,7 +30,11 @@ public class SrsFlvMuxer {
     private final Object txFrameLock = new Object();
 
     public SrsFlv flv = new SrsFlv();
+
     public boolean needToFindKeyFrame = true;
+
+    private boolean sequenceHeaderOk = false;
+
     private SrsFlvFrame mVideoSequenceHeader;
     private SrsFlvFrame mAudioSequenceHeader;
     private final SrsAllocator mVideoAllocator = new SrsAllocator(VIDEO_ALLOC_SIZE);
@@ -70,7 +74,7 @@ public class SrsFlvMuxer {
      * @param height height
      */
     public void setVideoResolution(int width, int height) {
-        publisher.setVideoResolution(width, height);
+        if (publisher != null) publisher.setVideoResolution(width, height);
     }
 
     /**
@@ -99,7 +103,7 @@ public class SrsFlvMuxer {
         }
         mFlvTagCache.clear();
         flv.reset();
-
+        sequenceHeaderOk = false;
         connected = false;
         mVideoSequenceHeader = null;
         mAudioSequenceHeader = null;
@@ -116,6 +120,7 @@ public class SrsFlvMuxer {
             }
             mVideoSequenceHeader = null;
             mAudioSequenceHeader = null;
+            sequenceHeaderOk = false;
         }
         return connected;
     }
@@ -154,14 +159,18 @@ public class SrsFlvMuxer {
             while (worker != null) {
                 while (mFlvTagCache.size() >= 50) {
                     SrsFlvFrame frame = mFlvTagCache.pollFirst();
-                    if (frame.isSequenceHeader()) {
+                    if (frame == null) break;
+                    if (frame.isSequenceHeader() && !sequenceHeaderOk) {
                         if (frame.isVideo()) {
-                            mVideoSequenceHeader = frame;
+                            mVideoSequenceHeader.dts = frame.dts;
+                            //  mVideoSequenceHeader = frame;
                             sendFlvTag(mVideoSequenceHeader);
                         } else if (frame.isAudio()) {
-                            mAudioSequenceHeader = frame;
+                            mAudioSequenceHeader.dts = frame.dts;
+                            // mAudioSequenceHeader = frame;
                             sendFlvTag(mAudioSequenceHeader);
                         }
+                        sequenceHeaderOk = true;
                     } else {
                         if (frame.isVideo() && mVideoSequenceHeader != null) {
                             sendFlvTag(frame);
@@ -325,7 +334,7 @@ public class SrsFlvMuxer {
 
     /**
      * the aac profile, for ADTS(HLS/TS)
-     *
+     * <p>
      * see https://github.com/simple-rtmp-server/srs/issues/310
      */
     private class SrsAacProfile {
