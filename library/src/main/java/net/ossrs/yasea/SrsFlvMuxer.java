@@ -11,8 +11,6 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -50,13 +48,6 @@ public class SrsFlvMuxer {
     private final SrsAllocator mVideoAllocator = new SrsAllocator(VIDEO_ALLOC_SIZE);
     private final SrsAllocator mAudioAllocator = new SrsAllocator(AUDIO_ALLOC_SIZE);
     private ArrayList<SrsFlvFrame> cache;
-    private BlockingQueue<SrsFlvFrame> mFlvTagCache = new LinkedBlockingQueue<>(40);
-//    private final ConcurrentSkipListSet<SrsFlvFrame> mFlvTagCache = new ConcurrentSkipListSet<>(
-//            (frame1, frame2) -> {
-//                if (frame1.dts < frame2.dts) return -1;
-//                if (frame1.dts > frame2.dts) return 1;
-//                return 0;
-//            });
 
     public static final int VIDEO_TRACK = 100;
     public static final int AUDIO_TRACK = 101;
@@ -123,7 +114,6 @@ public class SrsFlvMuxer {
             // Ignore illegal state.
         }
         clearCache();
-        mFlvTagCache.clear();
         flv.reset();
         sequenceHeaderOk = false;
         connected = false;
@@ -221,18 +211,15 @@ public class SrsFlvMuxer {
             Log.i(TAG, "SrsFlvMuxer connected");
 
             while (worker != null) {
-                SrsFlvFrame frame;
-                try {
-                    frame = mFlvTagCache.take();
+                while (!cache.isEmpty()) {
+                    SrsFlvFrame frame = cache.get(0);
                     if (frame == null) break;
                     if (frame.isSequenceHeader() && !sequenceHeaderOk) {
                         if (frame.isVideo()) {
-                            mVideoSequenceHeader.dts = frame.dts;
-                            //  mVideoSequenceHeader = frame;
+                            mVideoSequenceHeader = frame;
                             sendFlvTag(mVideoSequenceHeader);
                         } else if (frame.isAudio()) {
-                            mAudioSequenceHeader.dts = frame.dts;
-                            // mAudioSequenceHeader = frame;
+                            mAudioSequenceHeader = frame;
                             sendFlvTag(mAudioSequenceHeader);
                         }
                         sequenceHeaderOk = true;
@@ -243,20 +230,16 @@ public class SrsFlvMuxer {
                             sendFlvTag(frame);
                         }
                     }
-                } catch (InterruptedException e) {
-                    worker.interrupt();
-                    e.printStackTrace();
-                }
 
 
-
-                // Waiting for next frame
-                synchronized (txFrameLock) {
-                    try {
-                        // isEmpty() may take some time, so we set timeout to detect next frame
-                        txFrameLock.wait(500);
-                    } catch (InterruptedException ie) {
-                        worker = null;
+                    // Waiting for next frame
+                    synchronized (txFrameLock) {
+                        try {
+                            // isEmpty() may take some time, so we set timeout to detect next frame
+                            txFrameLock.wait(500);
+                        } catch (InterruptedException ie) {
+                            worker = null;
+                        }
                     }
                 }
             }
@@ -274,7 +257,6 @@ public class SrsFlvMuxer {
      */
     public void stop() {
         clearCache();
-        mFlvTagCache.clear();
         if (worker != null) {
             worker.interrupt();
             worker = null;
@@ -1062,7 +1044,7 @@ public class SrsFlvMuxer {
         }
 
         private void flvTagCacheAdd(SrsFlvFrame frame) {
-            mFlvTagCache.add(frame);
+            cache.add(frame);
             if (frame.isVideo()) {
                 getVideoFrameCacheNumber().incrementAndGet();
             }
