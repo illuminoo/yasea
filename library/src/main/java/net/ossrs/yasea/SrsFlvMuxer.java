@@ -165,7 +165,7 @@ public class SrsFlvMuxer {
             publisher.publishAudioData(frame.flvTag.array(), frame.flvTag.size(), frame.dts);
             mAudioAllocator.release(frame.flvTag);
         }
-        cache.add(frame);
+        // cache.add(frame);
 
         // always keep one audio and one videos in cache.
         if (nb_videos > 1 && nb_audios > 1) {
@@ -195,49 +195,16 @@ public class SrsFlvMuxer {
             }
 
             if (frame.isKeyFrame()) {
-                Log.i(TAG, String.format("worker: got frame type=%d, dts=%d, size=%dB, videos=%d, audios=%d",
+                Log.i(TAG, String.format("worker: got key frame type=%d, dts=%d, size=%dB, videos=%d, audios=%d",
                         frame.type, frame.dts, frame.flvTag.size(), nb_videos, nb_audios));
             } else {
-                //Log.i(TAG, String.format("worker: got frame type=%d, dts=%d, size=%dB, videos=%d, audios=%d",
-                //   frame.type, frame.dts, frame.tag.size, nb_videos, nb_audios));
+                Log.i(TAG, String.format("worker: got frame type=%d, dts=%d, size=%dB, videos=%d, audios=%d",
+                        frame.type, frame.dts, frame.flvTag.size(), nb_videos, nb_audios));
             }
 
-            // write the 11B flv tag header
-            ByteBuffer th = ByteBuffer.allocate(11);
-            // Reserved UB [2]
-            // Filter UB [1]
-            // TagType UB [5]
-            // DataSize UI24
-            int tag_size = ((frame.flvTag.size() & 0x00FFFFFF) | ((frame.type & 0x1F) << 24));
-            th.putInt(tag_size);
-            // Timestamp UI24
-            // TimestampExtended UI8
-            int time = ((frame.dts << 8) & 0xFFFFFF00) | ((frame.dts >> 24) & 0x000000FF);
-            th.putInt(time);
-            // StreamID UI24 Always 0.
-            th.put((byte) 0);
-            th.put((byte) 0);
-            th.put((byte) 0);
-            bos.write(th.array());
-
-            // write the flv tag data.
-            byte[] data = frame.flvTag.array();
-            bos.write(data, 0, frame.flvTag.size());
-
-            // write the 4B previous tag size.
-            // @remark, we append the tag size, this is different to SRS which write RTMP packet.
-            ByteBuffer pps = ByteBuffer.allocate(4);
-            pps.putInt((frame.flvTag.size() + 11));
-            bos.write(pps.array());
-
-            if (frame.isKeyFrame()) {
-                Log.i(TAG, String.format("worker: send frame type=%d, dts=%d, size=%dB, tag_size=%#x, time=%#x",
-                        frame.type, frame.dts, frame.flvTag.size(), tag_size, time
-                ));
-            }
         }
 
-        bos.flush();
+
     }
 
     /**
