@@ -149,7 +149,6 @@ public class SrsFlvMuxer {
             while (worker != null) {
                 while (!mFlvTagCache.isEmpty()) {
                     SrsFlvFrame frame = mFlvTagCache.poll();
-                    if (frame == null) break;
                     if (frame.isSequenceHeader()) {
                         if (frame.isVideo()) {
                             mVideoSequenceHeader = frame;
@@ -190,10 +189,12 @@ public class SrsFlvMuxer {
      * stop the muxer, disconnect RTMP connection.
      */
     public void stop() {
-        mFlvTagCache.clear();
         if (worker != null) {
-            worker.interrupt();
             worker = null;
+
+            synchronized (txFrameLock) {
+                txFrameLock.notifyAll();
+            }
         }
     }
 
@@ -205,7 +206,7 @@ public class SrsFlvMuxer {
      */
     public void writeVideoSample(ByteBuffer byteBuf, MediaCodec.BufferInfo bufferInfo) {
         AtomicInteger videoFrameCacheNumber = getVideoFrameCacheNumber();
-        if (videoFrameCacheNumber != null && videoFrameCacheNumber.get() < 300) {
+        if (videoFrameCacheNumber != null && videoFrameCacheNumber.get() < 60) {
             flv.writeVideoSample(byteBuf, bufferInfo);
         } else {
             needToFindKeyFrame = true;

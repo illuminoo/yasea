@@ -27,7 +27,7 @@ public class SrsAvcEncoder {
     /**
      * Default encoder
      */
-    public static final String CODEC = "video/avc";
+    public static final String CODEC = MediaFormat.MIMETYPE_VIDEO_AVC;
 
     /**
      * Default color format
