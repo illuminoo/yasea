@@ -5,9 +5,14 @@ import android.media.MediaFormat;
 import android.util.Log;
 import com.github.faucamp.simplertmp.RtmpHandler;
 
+import java.io.BufferedOutputStream;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.concurrent.ConcurrentSkipListSet;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -31,20 +36,27 @@ public class SrsFlvMuxer {
 
     public SrsFlv flv = new SrsFlv();
 
+    private int nb_videos;
+    private int nb_audios;
+
     public boolean needToFindKeyFrame = true;
 
     private boolean sequenceHeaderOk = false;
+
+    private BufferedOutputStream bos;
 
     private SrsFlvFrame mVideoSequenceHeader;
     private SrsFlvFrame mAudioSequenceHeader;
     private final SrsAllocator mVideoAllocator = new SrsAllocator(VIDEO_ALLOC_SIZE);
     private final SrsAllocator mAudioAllocator = new SrsAllocator(AUDIO_ALLOC_SIZE);
-    private final ConcurrentSkipListSet<SrsFlvFrame> mFlvTagCache = new ConcurrentSkipListSet<>(
-            (frame1, frame2) -> {
-                if (frame1.dts < frame2.dts) return -1;
-                if (frame1.dts > frame2.dts) return 1;
-                return 0;
-            });
+    private ArrayList<SrsFlvFrame> cache;
+    private BlockingQueue<SrsFlvFrame> mFlvTagCache = new LinkedBlockingQueue<>(40);
+//    private final ConcurrentSkipListSet<SrsFlvFrame> mFlvTagCache = new ConcurrentSkipListSet<>(
+//            (frame1, frame2) -> {
+//                if (frame1.dts < frame2.dts) return -1;
+//                if (frame1.dts > frame2.dts) return 1;
+//                return 0;
+//            });
 
     public static final int VIDEO_TRACK = 100;
     public static final int AUDIO_TRACK = 101;
@@ -56,6 +68,9 @@ public class SrsFlvMuxer {
      * @param handler the rtmp event handler.
      */
     public SrsFlvMuxer(RtmpHandler handler) {
+        nb_audios = 0;
+        nb_videos = 0;
+        cache = new ArrayList<SrsFlvFrame>();
         mHandler = handler;
         publisher = new SrsRtmpPublisher(handler);
     }
@@ -95,12 +110,19 @@ public class SrsFlvMuxer {
         }
     }
 
+    private void clearCache() {
+        nb_videos = 0;
+        nb_audios = 0;
+        cache.clear();
+        sequenceHeaderOk = false;
+    }
     public void disconnect() {
         try {
             publisher.close();
         } catch (IllegalStateException e) {
             // Ignore illegal state.
         }
+        clearCache();
         mFlvTagCache.clear();
         flv.reset();
         sequenceHeaderOk = false;
@@ -131,6 +153,7 @@ public class SrsFlvMuxer {
         }
 
         if (frame.isVideo()) {
+            nb_videos++;
             if (frame.isKeyFrame()) {
                 Log.d(TAG, String.format("worker: send frame type=%d, dts=%d, size=%dB",
                         frame.type, frame.dts, frame.flvTag.array().length));
@@ -138,9 +161,83 @@ public class SrsFlvMuxer {
             publisher.publishVideoData(frame.flvTag.array(), frame.flvTag.size(), frame.dts);
             mVideoAllocator.release(frame.flvTag);
         } else if (frame.isAudio()) {
+            nb_audios++;
             publisher.publishAudioData(frame.flvTag.array(), frame.flvTag.size(), frame.dts);
             mAudioAllocator.release(frame.flvTag);
         }
+        cache.add(frame);
+
+        // always keep one audio and one videos in cache.
+        if (nb_videos > 1 && nb_audios > 1) {
+            try {
+                sendCachedFrames();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    private void sendCachedFrames() throws IOException {
+        Collections.sort(cache, new Comparator<SrsFlvFrame>() {
+            @Override
+            public int compare(SrsFlvFrame lhs, SrsFlvFrame rhs) {
+                return lhs.dts - rhs.dts;
+            }
+        });
+
+        while (nb_videos > 1 && nb_audios > 1) {
+            SrsFlvFrame frame = cache.remove(0);
+
+            if (frame.isVideo()) {
+                nb_videos--;
+            } else if (frame.isAudio()) {
+                nb_audios--;
+            }
+
+            if (frame.isKeyFrame()) {
+                Log.i(TAG, String.format("worker: got frame type=%d, dts=%d, size=%dB, videos=%d, audios=%d",
+                        frame.type, frame.dts, frame.flvTag.size(), nb_videos, nb_audios));
+            } else {
+                //Log.i(TAG, String.format("worker: got frame type=%d, dts=%d, size=%dB, videos=%d, audios=%d",
+                //   frame.type, frame.dts, frame.tag.size, nb_videos, nb_audios));
+            }
+
+            // write the 11B flv tag header
+            ByteBuffer th = ByteBuffer.allocate(11);
+            // Reserved UB [2]
+            // Filter UB [1]
+            // TagType UB [5]
+            // DataSize UI24
+            int tag_size = ((frame.flvTag.size() & 0x00FFFFFF) | ((frame.type & 0x1F) << 24));
+            th.putInt(tag_size);
+            // Timestamp UI24
+            // TimestampExtended UI8
+            int time = ((frame.dts << 8) & 0xFFFFFF00) | ((frame.dts >> 24) & 0x000000FF);
+            th.putInt(time);
+            // StreamID UI24 Always 0.
+            th.put((byte) 0);
+            th.put((byte) 0);
+            th.put((byte) 0);
+            bos.write(th.array());
+
+            // write the flv tag data.
+            byte[] data = frame.flvTag.array();
+            bos.write(data, 0, frame.flvTag.size());
+
+            // write the 4B previous tag size.
+            // @remark, we append the tag size, this is different to SRS which write RTMP packet.
+            ByteBuffer pps = ByteBuffer.allocate(4);
+            pps.putInt((frame.flvTag.size() + 11));
+            bos.write(pps.array());
+
+            if (frame.isKeyFrame()) {
+                Log.i(TAG, String.format("worker: send frame type=%d, dts=%d, size=%dB, tag_size=%#x, time=%#x",
+                        frame.type, frame.dts, frame.flvTag.size(), tag_size, time
+                ));
+            }
+        }
+
+        bos.flush();
     }
 
     /**
@@ -157,8 +254,9 @@ public class SrsFlvMuxer {
             Log.i(TAG, "SrsFlvMuxer connected");
 
             while (worker != null) {
-                while (mFlvTagCache.size() >= 50) {
-                    SrsFlvFrame frame = mFlvTagCache.pollFirst();
+                SrsFlvFrame frame;
+                try {
+                    frame = mFlvTagCache.take();
                     if (frame == null) break;
                     if (frame.isSequenceHeader() && !sequenceHeaderOk) {
                         if (frame.isVideo()) {
@@ -178,7 +276,12 @@ public class SrsFlvMuxer {
                             sendFlvTag(frame);
                         }
                     }
+                } catch (InterruptedException e) {
+                    worker.interrupt();
+                    e.printStackTrace();
                 }
+
+
 
                 // Waiting for next frame
                 synchronized (txFrameLock) {
@@ -203,11 +306,13 @@ public class SrsFlvMuxer {
      * stop the muxer, disconnect RTMP connection.
      */
     public void stop() {
+        clearCache();
         mFlvTagCache.clear();
         if (worker != null) {
             worker.interrupt();
             worker = null;
         }
+        flv.reset();
     }
 
     /**
