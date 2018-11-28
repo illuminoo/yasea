@@ -66,6 +66,62 @@ public class SrsFlvMuxer {
         publisher = new SrsRtmpPublisher(handler);
     }
 
+
+    /**
+     * start to the remote server for remux.
+     */
+    public void start(final String rtmpUrl) {
+        worker = new Thread(() -> {
+            Log.i(TAG, "SrsFlvMuxer started");
+
+            if (!connect(rtmpUrl)) {
+                Log.e(TAG, "SrsFlvMuxer disconnected");
+                return;
+            }
+            Log.i(TAG, "SrsFlvMuxer connected");
+
+            while (worker != null) {
+                while (!cache.isEmpty()) {
+                    SrsFlvFrame frame = cache.get(0);
+                    if (frame == null) break;
+                    if (frame.isSequenceHeader() && !sequenceHeaderOk) {
+                        if (frame.isVideo()) {
+                            mVideoSequenceHeader = frame;
+                            sendFlvTag(mVideoSequenceHeader);
+                        } else if (frame.isAudio()) {
+                            mAudioSequenceHeader = frame;
+                            sendFlvTag(mAudioSequenceHeader);
+                        }
+                        sequenceHeaderOk = true;
+                    } else {
+                        if (frame.isVideo() && mVideoSequenceHeader != null) {
+                            sendFlvTag(frame);
+                        } else if (frame.isAudio() && mAudioSequenceHeader != null) {
+                            sendFlvTag(frame);
+                        }
+                    }
+
+                }
+                // Waiting for next frame
+                synchronized (txFrameLock) {
+                    try {
+                        // isEmpty() may take some time, so we set timeout to detect next frame
+                        txFrameLock.wait(500);
+                    } catch (InterruptedException ie) {
+                        worker = null;
+                    }
+                }
+
+            }
+
+            disconnect();
+            Log.i(TAG, "SrsFlvMuxer stopped");
+        });
+        worker.setPriority(Thread.MAX_PRIORITY);
+        worker.setDaemon(true);
+        worker.start();
+    }
+
     /**
      * get cached video frame number in publisher
      */
@@ -107,6 +163,7 @@ public class SrsFlvMuxer {
         cache.clear();
         sequenceHeaderOk = false;
     }
+
     public void disconnect() {
         try {
             publisher.close();
@@ -155,6 +212,7 @@ public class SrsFlvMuxer {
             publisher.publishAudioData(frame.flvTag.array(), frame.flvTag.size(), frame.dts);
             mAudioAllocator.release(frame.flvTag);
         }
+
         // cache.add(frame);
 
         // always keep one audio and one videos in cache.
@@ -197,60 +255,6 @@ public class SrsFlvMuxer {
 
     }
 
-    /**
-     * start to the remote server for remux.
-     */
-    public void start(final String rtmpUrl) {
-        worker = new Thread(() -> {
-            Log.i(TAG, "SrsFlvMuxer started");
-
-            if (!connect(rtmpUrl)) {
-                Log.e(TAG, "SrsFlvMuxer disconnected");
-                return;
-            }
-            Log.i(TAG, "SrsFlvMuxer connected");
-
-            while (worker != null) {
-                while (!cache.isEmpty()) {
-                    SrsFlvFrame frame = cache.get(0);
-                    if (frame == null) break;
-                    if (frame.isSequenceHeader() && !sequenceHeaderOk) {
-                        if (frame.isVideo()) {
-                            mVideoSequenceHeader = frame;
-                            sendFlvTag(mVideoSequenceHeader);
-                        } else if (frame.isAudio()) {
-                            mAudioSequenceHeader = frame;
-                            sendFlvTag(mAudioSequenceHeader);
-                        }
-                        sequenceHeaderOk = true;
-                    } else {
-                        if (frame.isVideo() && mVideoSequenceHeader != null) {
-                            sendFlvTag(frame);
-                        } else if (frame.isAudio() && mAudioSequenceHeader != null) {
-                            sendFlvTag(frame);
-                        }
-                    }
-
-
-                    // Waiting for next frame
-                    synchronized (txFrameLock) {
-                        try {
-                            // isEmpty() may take some time, so we set timeout to detect next frame
-                            txFrameLock.wait(500);
-                        } catch (InterruptedException ie) {
-                            worker = null;
-                        }
-                    }
-                }
-            }
-
-            disconnect();
-            Log.i(TAG, "SrsFlvMuxer stopped");
-        });
-        worker.setPriority(Thread.MAX_PRIORITY);
-        worker.setDaemon(true);
-        worker.start();
-    }
 
     /**
      * stop the muxer, disconnect RTMP connection.
