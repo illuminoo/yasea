@@ -262,8 +262,11 @@ public class SrsFlvMuxer {
     public void stop() {
         clearCache();
         if (worker != null) {
-            worker.interrupt();
             worker = null;
+
+            synchronized (txFrameLock) {
+                txFrameLock.notifyAll();
+            }
         }
         flv.reset();
     }
@@ -276,7 +279,7 @@ public class SrsFlvMuxer {
      */
     public void writeVideoSample(ByteBuffer byteBuf, MediaCodec.BufferInfo bufferInfo) {
         AtomicInteger videoFrameCacheNumber = getVideoFrameCacheNumber();
-        if (videoFrameCacheNumber != null && videoFrameCacheNumber.get() < 300) {
+        if (videoFrameCacheNumber != null && videoFrameCacheNumber.get() < 60) {
             flv.writeVideoSample(byteBuf, bufferInfo);
         } else {
             needToFindKeyFrame = true;
@@ -484,7 +487,7 @@ public class SrsFlvMuxer {
     /**
      * the muxed flv frame.
      */
-    public class SrsFlvFrame {
+    private class SrsFlvFrame {
         // the tag bytes.
         public SrsAllocator.Allocation flvTag;
         // the codec type for audio/aac and video/avc for instance.
