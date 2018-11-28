@@ -79,9 +79,11 @@ public class SrsFlvMuxer {
                 return;
             }
             Log.i(TAG, "SrsFlvMuxer connected");
-
+            ;
             while (worker != null) {
                 while (!cache.isEmpty()) {
+
+                    //fixme not sure about this
                     SrsFlvFrame frame = cache.get(0);
                     if (frame == null) break;
                     if (frame.isSequenceHeader() && !sequenceHeaderOk) {
@@ -171,8 +173,7 @@ public class SrsFlvMuxer {
             // Ignore illegal state.
         }
         clearCache();
-        flv.reset();
-        sequenceHeaderOk = false;
+        // flv.reset();
         connected = false;
         mVideoSequenceHeader = null;
         mAudioSequenceHeader = null;
@@ -213,7 +214,8 @@ public class SrsFlvMuxer {
             mAudioAllocator.release(frame.flvTag);
         }
 
-        // cache.add(frame);
+        //fixme not sure if necessary as we're already adding in cache in writeAudio Sample
+        cache.add(frame);
 
         // always keep one audio and one videos in cache.
         if (nb_videos > 1 && nb_audios > 1) {
@@ -268,7 +270,7 @@ public class SrsFlvMuxer {
                 txFrameLock.notifyAll();
             }
         }
-        flv.reset();
+        // flv.reset();
     }
 
     /**
