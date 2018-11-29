@@ -136,6 +136,7 @@ public class RtmpHandler extends Handler {
             default:
                 throw new RuntimeException("unknown msg " + msg.what);
         }
+
     }
 
     public interface RtmpListener {
