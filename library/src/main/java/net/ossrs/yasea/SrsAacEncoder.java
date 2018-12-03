@@ -22,7 +22,7 @@ import java.nio.ByteBuffer;
 public class SrsAacEncoder {
     private static final String TAG = "SrsAacEncoder";
 
-    public static final String ACODEC = "audio/mp4a-latm";
+    public static final String ACODEC = MediaFormat.MIMETYPE_AUDIO_AAC;
     public static final int ASAMPLERATE = 44100;
     public static int aChannelConfig = AudioFormat.CHANNEL_IN_STEREO;
     public static final int ABITRATE = 128 * 1024;  // 128 kbps
@@ -69,11 +69,12 @@ public class SrsAacEncoder {
         this.source = source;
 
         mPcmBufferSize = AudioRecord.getMinBufferSize(ASAMPLERATE, AudioFormat.CHANNEL_IN_STEREO,
-                AudioFormat.ENCODING_PCM_16BIT) * 4;
+                AudioFormat.ENCODING_PCM_16BIT);
         mPcmBuffer = new byte[mPcmBufferSize];
 
         MediaCodecList list = new MediaCodecList(MediaCodecList.REGULAR_CODECS);
         mediaFormat = MediaFormat.createAudioFormat(ACODEC, ASAMPLERATE, 2);
+        mediaFormat.setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC);
         mediaFormat.setInteger(MediaFormat.KEY_BIT_RATE, ABITRATE);
         mediaFormat.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, mPcmBufferSize);
         codecName = list.findEncoderForFormat(mediaFormat);
