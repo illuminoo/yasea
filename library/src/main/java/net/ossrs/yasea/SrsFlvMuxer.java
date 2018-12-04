@@ -101,12 +101,20 @@ public class SrsFlvMuxer {
         Log.i(TAG, "worker: disconnect ok.");
     }
 
-    public boolean connect(String url) {
+    /**
+     * Connect to RTMP endpoint
+     *
+     * @param url      URL
+     * @param user     Username
+     * @param password Password
+     * @return Is connected
+     */
+    public boolean connect(String url, String user, String password) {
         needToFindKeyFrame = true;
 
         if (!connected) {
-            Log.i(TAG, String.format("worker: connecting to RTMP server by url=%s\n", url));
-            if (publisher.connect(url)) {
+            Log.i(TAG, String.format("Connecting to RTMP server at %s...", url));
+            if (publisher.connect(url, user, password)) {
                 connected = publisher.publish("live");
             }
             mVideoSequenceHeader = null;
@@ -134,18 +142,23 @@ public class SrsFlvMuxer {
     }
 
     /**
-     * start to the remote server for remux.
+     * Start RTMP muxer
+     *
+     * @param url      URL of endpoint
+     * @param user     Username (optional)
+     * @param password Password (optional)
      */
-    public void start(final String rtmpUrl) {
+    public void start(String url, String user, String password) {
         worker = new Thread(() -> {
             Log.i(TAG, "SrsFlvMuxer started");
 
-            if (!connect(rtmpUrl)) {
+            if (!connect(url, user, password)) {
                 Log.e(TAG, "SrsFlvMuxer disconnected");
                 return;
             }
             Log.i(TAG, "SrsFlvMuxer connected");
 
+            Log.i(TAG, "SrsFlvMuxer running");
             while (worker != null) {
                 while (!mFlvTagCache.isEmpty()) {
                     SrsFlvFrame frame = mFlvTagCache.poll();
@@ -321,7 +334,7 @@ public class SrsFlvMuxer {
     }
 
     /**
-     * the aac profile, for ADTS(HLS/TS)
+     * the AAC profile, for ADTS(HLS/TS)
      *
      * see https://github.com/simple-rtmp-server/srs/issues/310
      */
