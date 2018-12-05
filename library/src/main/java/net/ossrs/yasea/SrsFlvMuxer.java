@@ -193,7 +193,7 @@ public class SrsFlvMuxer {
             disconnect();
             Log.i(TAG, "SrsFlvMuxer stopped");
         });
-        worker.setPriority(Thread.MAX_PRIORITY);
+        worker.setPriority(7);
         worker.setDaemon(true);
         worker.start();
     }
@@ -335,7 +335,7 @@ public class SrsFlvMuxer {
 
     /**
      * the AAC profile, for ADTS(HLS/TS)
-     *
+     * <p>
      * see https://github.com/simple-rtmp-server/srs/issues/310
      */
     private class SrsAacProfile {
@@ -617,12 +617,14 @@ public class SrsFlvMuxer {
             // h.264 raw data.
             for (int i = 0; i < frames.size(); i++) {
                 SrsFlvFrameBytes frame = frames.get(i);
+                frame.data.rewind();
                 frame.data.get(allocation.array(), allocation.size(), frame.size);
                 allocation.appendOffset(frame.size);
             }
 
             return allocation;
         }
+
 
         private SrsAnnexbSearch searchAnnexb(ByteBuffer bb, MediaCodec.BufferInfo bi) {
             annexb.match = false;
@@ -654,8 +656,6 @@ public class SrsFlvMuxer {
                 SrsAnnexbSearch tbbsc = searchAnnexb(bb, bi);
                 if (!tbbsc.match || tbbsc.nb_start_code < 3) {
                     Log.e(TAG, "annexb not match.");
-                    mHandler.notifyRtmpIllegalArgumentException(new IllegalArgumentException(
-                            String.format("annexb not match for %dB, pos=%d", bi.size, bb.position())));
                 }
 
                 // the start codes.
@@ -829,7 +829,7 @@ public class SrsFlvMuxer {
             // adts sync word 0xfff (12-bit)
             frame[offset] = (byte) 0xff;
             frame[offset + 1] = (byte) 0xf0;
-            // versioin 0 for MPEG-4, 1 for MPEG-2 (1-bit)
+            // version 0 for MPEG-4, 1 for MPEG-2 (1-bit)
             frame[offset + 1] |= 0 << 3;
             // layer 0 (2-bit)
             frame[offset + 1] |= 0 << 1;
@@ -863,8 +863,8 @@ public class SrsFlvMuxer {
 
         private void writeVideoSample(final ByteBuffer bb, MediaCodec.BufferInfo bi) {
             int pts = (int) (bi.presentationTimeUs / 1000);
-            int dts = pts;
 
+            int dts = pts;
             int type = SrsCodecVideoAVCFrame.InterFrame;
 
             // send each frame.
