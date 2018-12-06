@@ -28,7 +28,7 @@ public class RtmpConnection implements RtmpPublisher {
 
     protected static final String TAG = "RtmpConnection";
     private static final Pattern rtmpUrlPattern =
-            Pattern.compile("^rtmps?://([^/:]+)(?::(\\d+))*/([^/]+)/?([^*]*)$");
+            Pattern.compile("^rtmps?://(.+:.+[@])?([^/:]+)(?::(\\d+))*/([^/]+)/?([^*]*)$");
 
     protected RtmpHandler mHandler;
     private int port;
@@ -98,22 +98,30 @@ public class RtmpConnection implements RtmpPublisher {
             tcUrl = url.substring(0, url.lastIndexOf('/'));
             swfUrl = "";
             pageUrl = "";
-            host = matcher.group(1);
-            String portStr = matcher.group(2);
+            host = matcher.group(2);
+            String portStr = matcher.group(3);
             port = portStr != null ? Integer.parseInt(portStr) : 1935;
-            appName = matcher.group(3);
-            streamName = matcher.group(4);
-            this.user = user;
-            this.password = password;
+            appName = matcher.group(4);
+            streamName = matcher.group(5);
+
+            String creds = matcher.group(1);
+            if (creds != null && !creds.isEmpty()) {
+                tcUrl = tcUrl.replace(creds, "");
+                this.user = creds.substring(0, creds.indexOf(':'));
+                this.password = creds.substring(creds.indexOf(':') + 1, creds.indexOf('@'));
+            } else {
+                this.user = user;
+                this.password = password;
+            }
         } else {
             mHandler.notifyRtmpIllegalArgumentException(new IllegalArgumentException(
-                    "Invalid RTMP URL. Must be in format: rtmp://host[:port]/application/streamName"));
+                    "Invalid RTMP URL. Must be in format: rtmp://[username:password@]host[:port]/application/streamName"));
             return false;
         }
 
         if (streamName == null || appName == null) {
             mHandler.notifyRtmpIllegalArgumentException(new IllegalArgumentException(
-                    "Invalid RTMP URL. Must be in format: rtmp://host[:port]/application/streamName"));
+                    "Invalid RTMP URL. Must be in format: rtmp://[username:password@]host[:port]/application/streamName"));
             return false;
         }
 
