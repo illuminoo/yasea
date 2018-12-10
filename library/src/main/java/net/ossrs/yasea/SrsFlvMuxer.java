@@ -101,12 +101,20 @@ public class SrsFlvMuxer {
         Log.i(TAG, "worker: disconnect ok.");
     }
 
-    public boolean connect(String url) {
+    /**
+     * Connect to RTMP endpoint
+     *
+     * @param url      URL
+     * @param user     Username
+     * @param password Password
+     * @return Is connected
+     */
+    public boolean connect(String url, String user, String password) {
         needToFindKeyFrame = true;
 
         if (!connected) {
-            Log.i(TAG, String.format("worker: connecting to RTMP server by url=%s\n", url));
-            if (publisher.connect(url)) {
+            Log.i(TAG, String.format("Connecting to RTMP server at %s...", url));
+            if (publisher.connect(url, user, password)) {
                 connected = publisher.publish("live");
             }
             mVideoSequenceHeader = null;
@@ -134,18 +142,23 @@ public class SrsFlvMuxer {
     }
 
     /**
-     * start to the remote server for remux.
+     * Start RTMP muxer
+     *
+     * @param url      URL of endpoint
+     * @param user     Username (optional)
+     * @param password Password (optional)
      */
-    public void start(final String rtmpUrl) {
+    public void start(String url, String user, String password) {
         worker = new Thread(() -> {
             Log.i(TAG, "SrsFlvMuxer started");
 
-            if (!connect(rtmpUrl)) {
+            if (!connect(url, user, password)) {
                 Log.e(TAG, "SrsFlvMuxer disconnected");
                 return;
             }
             Log.i(TAG, "SrsFlvMuxer connected");
 
+            Log.i(TAG, "SrsFlvMuxer running");
             while (worker != null) {
                 while (!mFlvTagCache.isEmpty()) {
                     SrsFlvFrame frame = mFlvTagCache.poll();
@@ -180,7 +193,7 @@ public class SrsFlvMuxer {
             disconnect();
             Log.i(TAG, "SrsFlvMuxer stopped");
         });
-        worker.setPriority(Thread.MAX_PRIORITY);
+        worker.setPriority(7);
         worker.setDaemon(true);
         worker.start();
     }
@@ -321,8 +334,8 @@ public class SrsFlvMuxer {
     }
 
     /**
-     * the aac profile, for ADTS(HLS/TS)
-     *
+     * the AAC profile, for ADTS(HLS/TS)
+     * <p>
      * see https://github.com/simple-rtmp-server/srs/issues/310
      */
     private class SrsAacProfile {
@@ -604,12 +617,14 @@ public class SrsFlvMuxer {
             // h.264 raw data.
             for (int i = 0; i < frames.size(); i++) {
                 SrsFlvFrameBytes frame = frames.get(i);
+                frame.data.rewind();
                 frame.data.get(allocation.array(), allocation.size(), frame.size);
                 allocation.appendOffset(frame.size);
             }
 
             return allocation;
         }
+
 
         private SrsAnnexbSearch searchAnnexb(ByteBuffer bb, MediaCodec.BufferInfo bi) {
             annexb.match = false;
@@ -641,8 +656,6 @@ public class SrsFlvMuxer {
                 SrsAnnexbSearch tbbsc = searchAnnexb(bb, bi);
                 if (!tbbsc.match || tbbsc.nb_start_code < 3) {
                     Log.e(TAG, "annexb not match.");
-                    mHandler.notifyRtmpIllegalArgumentException(new IllegalArgumentException(
-                            String.format("annexb not match for %dB, pos=%d", bi.size, bb.position())));
                 }
 
                 // the start codes.
@@ -816,7 +829,7 @@ public class SrsFlvMuxer {
             // adts sync word 0xfff (12-bit)
             frame[offset] = (byte) 0xff;
             frame[offset + 1] = (byte) 0xf0;
-            // versioin 0 for MPEG-4, 1 for MPEG-2 (1-bit)
+            // version 0 for MPEG-4, 1 for MPEG-2 (1-bit)
             frame[offset + 1] |= 0 << 3;
             // layer 0 (2-bit)
             frame[offset + 1] |= 0 << 1;
@@ -850,8 +863,8 @@ public class SrsFlvMuxer {
 
         private void writeVideoSample(final ByteBuffer bb, MediaCodec.BufferInfo bi) {
             int pts = (int) (bi.presentationTimeUs / 1000);
-            int dts = pts;
 
+            int dts = pts;
             int type = SrsCodecVideoAVCFrame.InterFrame;
 
             // send each frame.

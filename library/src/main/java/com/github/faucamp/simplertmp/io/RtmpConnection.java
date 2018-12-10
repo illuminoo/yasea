@@ -3,6 +3,7 @@ package com.github.faucamp.simplertmp.io;
 import android.util.Log;
 import com.github.faucamp.simplertmp.RtmpHandler;
 import com.github.faucamp.simplertmp.RtmpPublisher;
+import com.github.faucamp.simplertmp.Util;
 import com.github.faucamp.simplertmp.amf.*;
 import com.github.faucamp.simplertmp.packets.*;
 
@@ -11,24 +12,27 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketAddress;
 import java.net.SocketException;
+import java.security.KeyManagementException;
+import java.security.NoSuchAlgorithmException;
+import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
  * Main RTMP connection implementation class
  *
- * @author francois, leoma
+ * @author francois, leoma, pedro
  */
 public class RtmpConnection implements RtmpPublisher {
 
     protected static final String TAG = "RtmpConnection";
-    private static final Pattern rtmpUrlPattern = Pattern.compile("^rtmp://([^/:]+)(:(\\d+))*/([^/]+)(/(.*))*$");
+    private static final Pattern rtmpUrlPattern =
+            Pattern.compile("^rtmps?://(.+:.+[@])?([^/:]+)(?::(\\d+))*/([^/]+)/?([^*]*)$");
 
     protected RtmpHandler mHandler;
     private int port;
+    private boolean tlsEnabled;
     private String host;
     private String appName;
     private String streamName;
@@ -62,6 +66,12 @@ public class RtmpConnection implements RtmpPublisher {
     private int audioDataLength;
     private long videoLastTimeMillis;
     private long audioLastTimeMillis;
+    private String user = null;
+    private String password = null;
+    private String salt = null;
+    private String challenge = null;
+    private String opaque = null;
+    private boolean onAuth = false;
 
     public RtmpConnection(RtmpHandler handler) {
         mHandler = handler;
@@ -75,30 +85,43 @@ public class RtmpConnection implements RtmpPublisher {
         handshake.readS0(in);
         handshake.readS1(in);
         handshake.writeC2(out);
+        out.flush();
         handshake.readS2(in);
     }
 
     @Override
-    public boolean connect(String url) {
+    public boolean connect(String url, String user, String password) {
+        reset();
         Matcher matcher = rtmpUrlPattern.matcher(url);
         if (matcher.matches()) {
+            tlsEnabled = matcher.group(0).startsWith("rtmps");
             tcUrl = url.substring(0, url.lastIndexOf('/'));
             swfUrl = "";
             pageUrl = "";
-            host = matcher.group(1);
+            host = matcher.group(2);
             String portStr = matcher.group(3);
             port = portStr != null ? Integer.parseInt(portStr) : 1935;
             appName = matcher.group(4);
-            streamName = matcher.group(6);
+            streamName = matcher.group(5);
+
+            String creds = matcher.group(1);
+            if (creds != null && !creds.isEmpty()) {
+                tcUrl = tcUrl.replace(creds, "");
+                this.user = creds.substring(0, creds.indexOf(':'));
+                this.password = creds.substring(creds.indexOf(':') + 1, creds.indexOf('@'));
+            } else {
+                this.user = user;
+                this.password = password;
+            }
         } else {
             mHandler.notifyRtmpIllegalArgumentException(new IllegalArgumentException(
-                    "Invalid RTMP URL. Must be in format: rtmp://host[:port]/application/streamName"));
+                    "Invalid RTMP URL. Must be in format: rtmp://[username:password@]host[:port]/application/streamName"));
             return false;
         }
 
         if (streamName == null || appName == null) {
             mHandler.notifyRtmpIllegalArgumentException(new IllegalArgumentException(
-                    "Invalid RTMP URL. Must be in format: rtmp://host[:port]/application/streamName"));
+                    "Invalid RTMP URL. Must be in format: rtmp://[username:password@]host[:port]/application/streamName"));
             return false;
         }
 
@@ -106,10 +129,17 @@ public class RtmpConnection implements RtmpPublisher {
         Log.d(TAG, "connect() called. Host: " + host + ", port: " + port + ", appName: " + appName + ", publishPath: " + streamName);
         rtmpSessionInfo = new RtmpSessionInfo();
         rtmpDecoder = new RtmpDecoder(rtmpSessionInfo);
-        socket = new Socket();
-        SocketAddress socketAddress = new InetSocketAddress(host, port);
         try {
-            socket.connect(socketAddress, 3000);
+            if (!tlsEnabled) {
+                socket = new Socket();
+                SocketAddress socketAddress = new InetSocketAddress(host, port);
+                socket.connect(socketAddress, 5000);
+            } else {
+                TLSSocketFactory socketFactory = new TLSSocketFactory();
+                socket = socketFactory.createSocket(host, port);
+                if (socket == null) throw new IOException("Socket creation failed");
+            }
+
             inputStream = new BufferedInputStream(socket.getInputStream());
             outputStream = new BufferedOutputStream(socket.getOutputStream());
             Log.d(TAG, "connect(): socket connection established, doing handhake...");
@@ -118,20 +148,15 @@ public class RtmpConnection implements RtmpPublisher {
         } catch (IOException e) {
             mHandler.notifyRtmpIOException(e);
             return false;
+        } catch (NoSuchAlgorithmException | KeyManagementException e) {
+            mHandler.notifyRtmpIOException(new IOException(e));
+            return false;
         }
 
         // Start the "main" handling thread
-        rxPacketHandler = new Thread(new Runnable() {
-
-            @Override
-            public void run() {
-                try {
-                    Log.d(TAG, "starting main rx handler loop");
-                    handleRxPacketLoop();
-                } catch (IOException ex) {
-                    Logger.getLogger(RtmpConnection.class.getName()).log(Level.SEVERE, null, ex);
-                }
-            }
+        rxPacketHandler = new Thread(() -> {
+            Log.d(TAG, "starting main rx handler loop");
+            handleRxPacketLoop();
         });
         rxPacketHandler.start();
 
@@ -151,22 +176,14 @@ public class RtmpConnection implements RtmpPublisher {
         ChunkStreamInfo chunkStreamInfo = rtmpSessionInfo.getChunkStreamInfo(ChunkStreamInfo.RTMP_CID_OVER_CONNECTION);
         Command invoke = new Command("connect", ++transactionIdCounter, chunkStreamInfo);
         invoke.getHeader().setMessageStreamId(0);
-        AmfObject args = new AmfObject();
-        args.setProperty("app", appName);
-        args.setProperty("flashVer", "LNX 11,2,202,233"); // Flash player OS: Linux, version: 11.2.202.233
-        args.setProperty("swfUrl", swfUrl);
-        args.setProperty("tcUrl", tcUrl);
-        args.setProperty("fpad", false);
-        args.setProperty("capabilities", 239);
-        args.setProperty("audioCodecs", 3575);
-        args.setProperty("videoCodecs", 252);
-        args.setProperty("videoFunction", 1);
-        args.setProperty("pageUrl", pageUrl);
-        args.setProperty("objectEncoding", 0);
-        invoke.addData(args);
+        if (user == null) {
+            invoke.addData(getAmfInfo(null));
+        } else {
+            invoke.addData(getAmfInfo("?authmod=adobe&user=" + user));
+        }
         sendRtmpPacket(invoke);
-        mHandler.notifyRtmpConnecting("Connecting");
 
+        mHandler.notifyRtmpConnecting("Connecting");
         synchronized (connectingLock) {
             try {
                 connectingLock.wait(5000);
@@ -178,6 +195,52 @@ public class RtmpConnection implements RtmpPublisher {
             shutdown();
         }
         return connected;
+    }
+
+    /**
+     * Get AMF info
+     *
+     * @param param Additional connection parameter (optional)
+     * @return AMF info
+     */
+    private AmfObject getAmfInfo(String param) {
+        if (param == null) param = "";
+        AmfObject args = new AmfObject();
+        args.setProperty("flashVer", "FMLE/3.0 (compatible; Lavf57.56.101)");
+        args.setProperty("swfUrl", swfUrl);
+        args.setProperty("fpad", false);
+        args.setProperty("capabilities", 239);
+        args.setProperty("audioCodecs", 3575);
+        args.setProperty("videoCodecs", 252);
+        args.setProperty("videoFunction", 1);
+        args.setProperty("pageUrl", pageUrl);
+        args.setProperty("objectEncoding", 0);
+        args.setProperty("app", appName + param);
+        args.setProperty("tcUrl", tcUrl + param);
+        return args;
+    }
+
+    private void sendConnectAuthPacketFinal(String user, String password, String salt, String challenge, String opaque) {
+        String challenge2 = String.format("%08x", new Random().nextInt());
+        String response = Util.stringToMD5BASE64(user + salt + password);
+        if (!opaque.isEmpty()) {
+            response += opaque;
+        } else if (!challenge.isEmpty()) {
+            response += challenge;
+        }
+        response = Util.stringToMD5BASE64(response + challenge2);
+        String result = "?authmod=adobe&user=" + user + "&challenge=" + challenge2 + "&response=" + response;
+        if (!opaque.isEmpty()) {
+            result += "&opaque=" + opaque;
+        }
+
+        ChunkStreamInfo.markSessionTimestampTx();
+        Log.d(TAG, "rtmpConnect(): Building 'connect' invoke packet");
+        ChunkStreamInfo chunkStreamInfo = rtmpSessionInfo.getChunkStreamInfo(ChunkStreamInfo.RTMP_CID_OVER_STREAM);
+        Command invoke = new Command("connect", ++transactionIdCounter, chunkStreamInfo);
+        invoke.getHeader().setMessageStreamId(0);
+        invoke.addData(getAmfInfo(result));
+        sendRtmpPacket(invoke);
     }
 
     @Override
@@ -250,7 +313,6 @@ public class RtmpConnection implements RtmpPublisher {
         }
 
         Log.d(TAG, "fmlePublish(): Sending publish command...");
-        // transactionId == 0
         Command publish = new Command("publish", 0);
         publish.getHeader().setChunkStreamId(ChunkStreamInfo.RTMP_CID_OVER_STREAM);
         publish.getHeader().setMessageStreamId(currentStreamId);
@@ -277,8 +339,8 @@ public class RtmpConnection implements RtmpPublisher {
         ecmaArray.setProperty("videodatarate", 0);
         ecmaArray.setProperty("framerate", 0);
         ecmaArray.setProperty("audiodatarate", 0);
-        ecmaArray.setProperty("audiosamplerate", 0);
-        ecmaArray.setProperty("audiosamplesize", 0);
+        ecmaArray.setProperty("audiosamplerate", 44100);
+        ecmaArray.setProperty("audiosamplesize", 16);
         ecmaArray.setProperty("stereo", true);
         ecmaArray.setProperty("filesize", 0);
         metadata.addData(ecmaArray);
@@ -323,15 +385,15 @@ public class RtmpConnection implements RtmpPublisher {
 
                 // It will raise SocketException in sendRtmpPacket
                 socket.shutdownOutput();
-            } catch (IOException ioe) {
-                ioe.printStackTrace();
+            } catch (IOException | UnsupportedOperationException e) {
+                e.printStackTrace();
             }
 
             // shutdown rxPacketHandler
             if (rxPacketHandler != null) {
                 rxPacketHandler.interrupt();
                 try {
-                    rxPacketHandler.join();
+                    rxPacketHandler.join(1000);
                 } catch (InterruptedException ie) {
                     rxPacketHandler.interrupt();
                 }
@@ -348,8 +410,6 @@ public class RtmpConnection implements RtmpPublisher {
 
             mHandler.notifyRtmpDisconnected();
         }
-
-        reset();
     }
 
     private void reset() {
@@ -371,6 +431,11 @@ public class RtmpConnection implements RtmpPublisher {
         socket = null;
         rtmpSessionInfo = null;
         rtmpDecoder = null;
+        user = null;
+        password = null;
+        salt = null;
+        challenge = null;
+        opaque = null;
     }
 
     @Override
@@ -486,7 +551,7 @@ public class RtmpConnection implements RtmpPublisher {
         }
     }
 
-    private void handleRxPacketLoop() throws IOException {
+    private void handleRxPacketLoop() {
         // Handle all queued received RTMP packets
         while (!Thread.interrupted()) {
             try {
@@ -556,63 +621,128 @@ public class RtmpConnection implements RtmpPublisher {
         }
     }
 
-    private void handleRxInvoke(Command invoke) throws IOException {
+    private void handleRxInvoke(Command invoke) {
         String commandName = invoke.getCommandName();
 
-        if (commandName.equals("_result")) {
-            // This is the result of one of the methods invoked by us
-            String method = rtmpSessionInfo.takeInvokedCommand(invoke.getTransactionId());
+        switch (commandName) {
+            case "_error":
+                try {
+                    String description = ((AmfString) ((AmfObject) invoke.getData().get(1)).getProperty("description")).getValue();
+                    Log.i(TAG, description);
+                    if (description.contains("reason=authfailed")) {
+                        mHandler.notifyRtmpIOException(new IOException("Authorization failed"));
+                        connected = false;
+                        synchronized (connectingLock) {
+                            connectingLock.notifyAll();
+                        }
+                    } else if (user != null && password != null && description.contains("challenge=") && description.contains("salt=")) {
+                        onAuth = true;
+                        shutdown();
+                        rtmpSessionInfo = new RtmpSessionInfo();
+                        rtmpDecoder = new RtmpDecoder(rtmpSessionInfo);
+                        if (!tlsEnabled) {
+                            socket = new Socket(host, port);
+                        } else {
+                            TLSSocketFactory socketFactory = new TLSSocketFactory();
+                            socket = socketFactory.createSocket(host, port);
+                            if (socket == null) throw new IOException("Socket creation failed");
+                        }
+                        inputStream = new BufferedInputStream(socket.getInputStream());
+                        outputStream = new BufferedOutputStream(socket.getOutputStream());
+                        Log.d(TAG, "connect(): socket connection established, doing handshake...");
+                        salt = Util.getSalt(description);
+                        challenge = Util.getChallenge(description);
+                        opaque = Util.getOpaque(description);
+                        handshake(inputStream, outputStream);
+                        rxPacketHandler = new Thread(() -> handleRxPacketLoop());
+                        rxPacketHandler.start();
+                        sendConnectAuthPacketFinal(user, password, salt, challenge, opaque);
+                    } else {
+                        mHandler.notifyRtmpIOException(new IOException("Authorization failed"));
+                        connected = false;
+                        synchronized (connectingLock) {
+                            connectingLock.notifyAll();
+                        }
+                    }
+                } catch (Exception e) {
+                    mHandler.notifyRtmpIOException(new IOException(e));
+                    connected = false;
+                    synchronized (connectingLock) {
+                        connectingLock.notifyAll();
+                    }
+                }
+                break;
+            case "_result":
+                // This is the result of one of the methods invoked by us
+                String method = rtmpSessionInfo.takeInvokedCommand(invoke.getTransactionId());
 
-            Log.d(TAG, "handleRxInvoke: Got result for invoked method: " + method);
-            if ("connect".equals(method)) {
-                // Capture server ip/pid/id information if any
-                srsServerInfo = onSrsServerInfo(invoke);
-                // We can now send createStream commands
-                connected = true;
-                synchronized (connectingLock) {
-                    connectingLock.notifyAll();
+                Log.d(TAG, "handleRxInvoke: Got result for invoked method: " + method);
+                if ("connect".equals(method)) {
+                    if (onAuth) {
+                        mHandler.notifyRtmpConnected("Authorization successful");
+                        onAuth = false;
+                    }
+                    // Capture server ip/pid/id information if any
+                    srsServerInfo = onSrsServerInfo(invoke);
+                    // We can now send createStream commands
+                    connected = true;
+                    synchronized (connectingLock) {
+                        connectingLock.notifyAll();
+                    }
+                } else if ("createStream".contains(method)) {
+                    // Get stream id
+                    currentStreamId = (int) ((AmfNumber) invoke.getData().get(1)).getValue();
+                    Log.d(TAG, "handleRxInvoke(): Stream ID to publish: " + currentStreamId);
+                    if (streamName != null && publishType != null) {
+                        fmlePublish();
+                    }
+                } else if ("releaseStream".contains(method)) {
+                    Log.d(TAG, "handleRxInvoke(): 'releaseStream'");
+                } else if ("FCPublish".contains(method)) {
+                    Log.d(TAG, "handleRxInvoke(): 'FCPublish'");
+                } else {
+                    Log.w(TAG, "handleRxInvoke(): '_result' message received for unknown method: " + method);
                 }
-            } else if ("createStream".contains(method)) {
-                // Get stream id
-                currentStreamId = (int) ((AmfNumber) invoke.getData().get(1)).getValue();
-                Log.d(TAG, "handleRxInvoke(): Stream ID to publish: " + currentStreamId);
-                if (streamName != null && publishType != null) {
-                    fmlePublish();
-                }
-            } else if ("releaseStream".contains(method)) {
-                Log.d(TAG, "handleRxInvoke(): 'releaseStream'");
-            } else if ("FCPublish".contains(method)) {
-                Log.d(TAG, "handleRxInvoke(): 'FCPublish'");
-            } else {
-                Log.w(TAG, "handleRxInvoke(): '_result' message received for unknown method: " + method);
-            }
-        } else if (commandName.equals("onBWDone")) {
-            Log.d(TAG, "handleRxInvoke(): 'onBWDone'");
-        } else if (commandName.equals("onFCPublish")) {
-            Log.d(TAG, "handleRxInvoke(): 'onFCPublish'");
-        } else if (commandName.equals("onStatus")) {
-            String code = ((AmfString) ((AmfObject) invoke.getData().get(1)).getProperty("code")).getValue();
-            Log.d(TAG, "handleRxInvoke(): onStatus " + code);
-            if (code.equals("NetStream.Publish.Start")) {
-                if (!connected) {
-                    mHandler.notifyRtmpIllegalStateException(new IllegalStateException("Not connected to RTMP server"));
-                    return;
-                }
-                if (currentStreamId == 0) {
-                    mHandler.notifyRtmpIllegalStateException(new IllegalStateException("No current stream object exists"));
-                    return;
-                }
+                break;
+            case "onBWDone":
+                Log.d(TAG, "handleRxInvoke(): 'onBWDone'");
+                break;
+            case "onFCPublish":
+                Log.d(TAG, "handleRxInvoke(): 'onFCPublish'");
+                break;
+            case "onStatus":
+                String code = ((AmfString) ((AmfObject) invoke.getData().get(1)).getProperty("code")).getValue();
+                Log.d(TAG, "handleRxInvoke(): onStatus " + code);
+                if (code.equals("NetStream.Publish.Start")) {
+                    if (!connected) {
+                        mHandler.notifyRtmpIllegalStateException(new IllegalStateException("Not connected to RTMP server"));
+                        return;
+                    }
 
-                onMetaData(currentStreamId);
+                    if (currentStreamId == 0) {
+                        mHandler.notifyRtmpIllegalStateException(new IllegalStateException("No current stream object exists"));
+                        return;
+                    }
 
-                // We can now publish AV data
-                publishPermitted = true;
-                synchronized (publishLock) {
-                    publishLock.notifyAll();
+                    onMetaData(currentStreamId);
+
+                    // We can now publish AV data
+                    publishPermitted = true;
+                    synchronized (publishLock) {
+                        publishLock.notifyAll();
+                    }
+                } else if (code.equals("NetConnection.Connect.Rejected")) {
+                    String description = ((AmfString) ((AmfObject) invoke.getData().get(1)).getProperty("description")).getValue();
+                    mHandler.notifyRtmpIOException(new IOException(description));
+                    publishPermitted = false;
+                    synchronized (publishLock) {
+                        publishLock.notifyAll();
+                    }
                 }
-            }
-        } else {
-            Log.e(TAG, "handleRxInvoke(): Unknown/unhandled server invoke: " + invoke);
+                break;
+            default:
+                Log.e(TAG, "handleRxInvoke(): Unknown/unhandled server invoke: " + invoke);
+                break;
         }
     }
 

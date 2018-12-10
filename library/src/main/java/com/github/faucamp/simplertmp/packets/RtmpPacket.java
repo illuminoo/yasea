@@ -8,11 +8,10 @@ import java.io.InputStream;
 import java.io.OutputStream;
 
 /**
- *
  * @author francois, leo
  */
 public abstract class RtmpPacket {
-     
+
     protected RtmpHeader header;
 
     public RtmpPacket(RtmpHeader header) {
@@ -22,9 +21,9 @@ public abstract class RtmpPacket {
     public RtmpHeader getHeader() {
         return header;
     }
-    
-    public abstract void readBody(InputStream in) throws IOException;    
-    
+
+    public abstract void readBody(InputStream in) throws IOException;
+
     protected abstract void writeBody(OutputStream out) throws IOException;
 
     protected abstract byte[] array();

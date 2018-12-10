@@ -9,7 +9,6 @@ import java.io.InputStream;
 import java.io.OutputStream;
 
 /**
- *
  * @author francois
  */
 public class AmfNull implements AmfData {
@@ -20,10 +19,10 @@ public class AmfNull implements AmfData {
     }
 
     @Override
-    public void readFrom(InputStream in) throws IOException {
-        // Skip data type byte (we assume it's already read)    
+    public void readFrom(InputStream in) {
+        // Skip data type byte (we assume it's already read)
     }
-    
+
     public static void writeNullTo(OutputStream out) throws IOException {
         out.write(AmfType.NULL.getValue());
     }
@@ -31,5 +30,5 @@ public class AmfNull implements AmfData {
     @Override
     public int getSize() {
         return 1;
-    }    
+    }
 }

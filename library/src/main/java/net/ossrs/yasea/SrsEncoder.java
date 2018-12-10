@@ -2,13 +2,7 @@ package net.ossrs.yasea;
 
 import android.content.res.Configuration;
 import android.graphics.Rect;
-import android.media.AudioFormat;
-import android.media.AudioRecord;
-import android.media.MediaCodec;
-import android.media.MediaCodecInfo;
-import android.media.MediaCodecList;
-import android.media.MediaFormat;
-import android.media.MediaRecorder;
+import android.media.*;
 import android.util.Log;
 
 import java.io.IOException;
@@ -330,13 +324,13 @@ public class SrsEncoder {
 
     // when got encoded h264 es stream.
     private void onEncodedAnnexbFrame(ByteBuffer es, MediaCodec.BufferInfo bi) {
-        mp4Muxer.writeSampleData(videoMp4Track, es.duplicate(), bi);
+        mp4Muxer.writeVideoSample(es.duplicate(), bi);
         flvMuxer.writeVideoSample(es, bi);
     }
 
     // when got encoded aac raw stream.
     private void onEncodedAacFrame(ByteBuffer es, MediaCodec.BufferInfo bi) {
-        mp4Muxer.writeSampleData(audioMp4Track, es.duplicate(), bi);
+        mp4Muxer.writeAudioSample(es.duplicate(), bi);
         flvMuxer.writeAudioSample(es, bi);
     }
 
