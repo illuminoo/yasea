@@ -62,7 +62,7 @@ public class SrsRtmpPublisher extends RtmpConnection {
             ecmaArray.setProperty("videocodecid", 7);
             ecmaArray.setProperty("width", videoFormat.getInteger(MediaFormat.KEY_WIDTH));
             ecmaArray.setProperty("height", videoFormat.getInteger(MediaFormat.KEY_HEIGHT));
-            ecmaArray.setProperty("videodatarate", videoFormat.getInteger(MediaFormat.KEY_BIT_RATE));
+            ecmaArray.setProperty("videodatarate", videoFormat.getInteger(MediaFormat.KEY_BIT_RATE) / 1024);
             ecmaArray.setProperty("framerate", videoFormat.getInteger(MediaFormat.KEY_FRAME_RATE));
             ecmaArray.setProperty("avcprofile", 66);
             ecmaArray.setProperty("avclevel", 31);
