@@ -943,7 +943,7 @@ public class SrsFlvMuxer {
         private void writeH264IpbFrame(ArrayList<SrsFlvFrameBytes> frames, int frame_type, int dts, int pts) {
             // when sps or pps not sent, ignore the packet.
             // @see https://github.com/simple-rtmp-server/srs/issues/203
-            if (!h264_sps_pps_sent) {
+            if (h264_pps == null || h264_sps == null) {
                 return;
             }
 
