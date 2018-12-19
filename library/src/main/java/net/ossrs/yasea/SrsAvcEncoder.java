@@ -152,6 +152,9 @@ public class SrsAvcEncoder {
      */
     public void start() throws IOException {
         vencoder = MediaCodec.createByCodecName(codecName);
+        if (vencoder == null)
+            throw new IOException("Required video encoder or settings are not supported by this device");
+
         vencoder.configure(mediaFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
         if (handler != null) {
             videoThread = new HandlerThread("Video");
