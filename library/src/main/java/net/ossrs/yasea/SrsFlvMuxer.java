@@ -93,7 +93,6 @@ public class SrsFlvMuxer {
             // Ignore illegal state.
         }
         mFlvTagCache.clear();
-//        flv.reset();
 
         connected = false;
         mVideoSequenceHeader = null;
@@ -111,7 +110,6 @@ public class SrsFlvMuxer {
      */
     public boolean connect(String url, String user, String password) {
         needToFindKeyFrame = true;
-        flv.reset();
 
         if (!connected) {
             Log.i(TAG, String.format("Connecting to RTMP server at %s...", url));
@@ -149,7 +147,7 @@ public class SrsFlvMuxer {
      * @param user     Username (optional)
      * @param password Password (optional)
      */
-    public void start(String url, String user, String password) {
+    public synchronized void start(String url, String user, String password) {
         flv.reset();
 
         worker = new Thread(() -> {
@@ -204,7 +202,7 @@ public class SrsFlvMuxer {
     /**
      * stop the muxer, disconnect RTMP connection.
      */
-    public void stop() {
+    public synchronized void stop() {
         if (worker != null) {
             worker = null;
 
@@ -212,6 +210,13 @@ public class SrsFlvMuxer {
                 txFrameLock.notifyAll();
             }
         }
+    }
+
+    /**
+     * @return Muxer is connected
+     */
+    public synchronized boolean isConnected() {
+        return worker != null && connected;
     }
 
     /**
@@ -892,17 +897,21 @@ public class SrsFlvMuxer {
                 if (!frame.data.equals(h264_sps)) {
                     byte[] sps = new byte[frame.size];
                     frame.data.get(sps);
-                    h264_sps_pps_sent = false;
                     h264_sps = ByteBuffer.wrap(sps);
+                    h264_sps_pps_sent = false;
                 }
 
                 SrsFlvFrameBytes frame_pps = avc.demuxAnnexb(bb, bi.size, false);
                 if (frame_pps.size > 0 && !frame_pps.data.equals(h264_pps)) {
                     byte[] pps = new byte[frame_pps.size];
                     frame_pps.data.get(pps);
-                    h264_sps_pps_sent = false;
                     h264_pps = ByteBuffer.wrap(pps);
+                    h264_sps_pps_sent = false;
+                }
+
+                if (h264_sps != null && h264_pps != null && !h264_sps_pps_sent) {
                     writeH264SpsPps(dts, pts);
+                    h264_sps_pps_sent = true;
                 }
                 return;
             } else if (nal_unit_type != SrsAvcNaluType.NonIDR) {
@@ -916,13 +925,6 @@ public class SrsFlvMuxer {
         }
 
         private void writeH264SpsPps(int dts, int pts) {
-            // when sps or pps changed, update the sequence header,
-            // for the pps maybe not changed while sps changed.
-            // so, we must check when each video ts message frame parsed.
-            if (h264_sps_pps_sent || h264_pps == null || h264_sps == null) {
-                return;
-            }
-
             // h264 raw to h264 packet.
             ArrayList<SrsFlvFrameBytes> frames = new ArrayList<>();
             avc.muxSequenceHeader(h264_sps, h264_pps, frames);
@@ -936,16 +938,12 @@ public class SrsFlvMuxer {
             writeRtmpPacket(SrsCodecFlvTag.Video, dts, frame_type, avc_packet_type, video_tag);
             Log.i(TAG, String.format("flv: h264 sps/pps sent, sps=%dB, pps=%dB",
                     h264_sps.array().length, h264_pps.array().length));
-
-            h264_sps_pps_sent = true;
         }
 
         private void writeH264IpbFrame(ArrayList<SrsFlvFrameBytes> frames, int frame_type, int dts, int pts) {
             // when sps or pps not sent, ignore the packet.
             // @see https://github.com/simple-rtmp-server/srs/issues/203
-            if (h264_pps == null || h264_sps == null) {
-                return;
-            }
+            if (!h264_sps_pps_sent) return;
 
             video_tag = avc.muxFlvTag(frames, frame_type, SrsCodecVideoAVCType.NALU, dts, pts);
 
