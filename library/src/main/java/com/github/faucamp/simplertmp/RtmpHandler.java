@@ -10,7 +10,6 @@ import java.net.SocketException;
 /**
  * Created by leo.ma on 2016/11/3.
  */
-
 public class RtmpHandler extends Handler {
 
     private static final int MSG_RTMP_CONNECTING = 0;

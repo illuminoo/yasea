@@ -90,6 +90,8 @@ public class SrsAacEncoder {
         // Prepare microphone
         mic = new AudioRecord(source, SrsAacEncoder.ASAMPLERATE,
                 AudioFormat.CHANNEL_IN_STEREO, AudioFormat.ENCODING_PCM_16BIT, mPcmBufferSize);
+        if (mic == null)
+            throw new IOException("Specified audio source is not supported by this device");
 
         if (AcousticEchoCanceler.isAvailable()) {
             aec = AcousticEchoCanceler.create(mic.getAudioSessionId());
@@ -103,16 +105,19 @@ public class SrsAacEncoder {
         mic.startRecording();
 
         // Start Audio encoder
-        aencoder = MediaCodec.createByCodecName(codecName);
-        aencoder.configure(mediaFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
-        if (handler != null) {
-            audioThread = new HandlerThread("Audio");
-            audioThread.start();
-            aencoder.setCallback(handler, new Handler(audioThread.getLooper()));
+        try {
+            aencoder = MediaCodec.createByCodecName(codecName);
+            aencoder.configure(mediaFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+            if (handler != null) {
+                audioThread = new HandlerThread("Audio");
+                audioThread.start();
+                aencoder.setCallback(handler, new Handler(audioThread.getLooper()));
+            }
+            aencoder.start();
+            Log.i(TAG, "Started");
+        } catch (Exception e) {
+            throw new IOException("Required audio encoder or settings are not supported by this device", e);
         }
-        aencoder.start();
-
-        Log.i(TAG, "Started");
     }
 
     public void stop() {
