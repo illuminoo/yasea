@@ -40,6 +40,9 @@ public class SrsFlvMuxer {
     public static final int VIDEO_TRACK = 100;
     public static final int AUDIO_TRACK = 101;
     private static final String TAG = "SrsFlvMuxer";
+    private String url;
+    private String user;
+    private String password;
 
     /**
      * constructor.
@@ -66,6 +69,19 @@ public class SrsFlvMuxer {
      */
     public void setVideoResolution(int width, int height) {
         publisher.setVideoResolution(width, height);
+    }
+
+    /**
+     * Set destination
+     *
+     * @param url      URL of RTMP server
+     * @param user     Username (optional)
+     * @param password Password (optional)
+     */
+    public void setDestination(String url, String user, String password) {
+        this.url = url;
+        this.user = user;
+        this.password = password;
     }
 
     /**
@@ -103,14 +119,15 @@ public class SrsFlvMuxer {
     /**
      * Connect to RTMP endpoint
      *
-     * @param url      URL
-     * @param user     Username
-     * @param password Password
      * @return Is connected
      */
-    public boolean connect(String url, String user, String password) {
-        needToFindKeyFrame = true;
+    public boolean connect() {
+        if (url == null) {
+            Log.e(TAG, "URL is not specified");
+            return false;
+        }
 
+        needToFindKeyFrame = true;
         if (!connected) {
             Log.i(TAG, String.format("Connecting to RTMP server at %s...", url));
             if (publisher.connect(url, user, password)) {
@@ -142,18 +159,14 @@ public class SrsFlvMuxer {
 
     /**
      * Start RTMP muxer
-     *
-     * @param url      URL of endpoint
-     * @param user     Username (optional)
-     * @param password Password (optional)
      */
-    public synchronized void start(String url, String user, String password) {
+    public synchronized void start() {
         flv.reset();
 
         worker = new Thread(() -> {
             Log.i(TAG, "SrsFlvMuxer started");
 
-            if (!connect(url, user, password)) {
+            if (!connect()) {
                 Log.e(TAG, "SrsFlvMuxer disconnected");
                 return;
             }

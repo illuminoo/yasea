@@ -26,10 +26,9 @@ public class SrsAacEncoder {
     public static final int ASAMPLERATE = 44100;
     public static int aChannelConfig = AudioFormat.CHANNEL_IN_STEREO;
     public static final int ABITRATE = 128 * 1024;  // 128 kbps
+    private static final int PCM_BUFFER_SIZE = AudioRecord.getMinBufferSize(ASAMPLERATE, AudioFormat.CHANNEL_IN_STEREO, AudioFormat.ENCODING_PCM_16BIT);
 
-    private final int mPcmBufferSize;
     private final byte[] mPcmBuffer;
-
     public final MediaFormat mediaFormat;
     private final String codecName;
     private final int source;
@@ -61,23 +60,28 @@ public class SrsAacEncoder {
     /**
      * Constructor
      *
-     * @param source Audio source
+     * @param source  Audio source
      * @param handler Codec handler
      */
     public SrsAacEncoder(int source, MediaCodec.Callback handler) {
         this.handler = handler;
         this.source = source;
-
-        mPcmBufferSize = AudioRecord.getMinBufferSize(ASAMPLERATE, AudioFormat.CHANNEL_IN_STEREO,
-                AudioFormat.ENCODING_PCM_16BIT);
-        mPcmBuffer = new byte[mPcmBufferSize];
+        mPcmBuffer = new byte[PCM_BUFFER_SIZE];
 
         MediaCodecList list = new MediaCodecList(MediaCodecList.REGULAR_CODECS);
-        mediaFormat = MediaFormat.createAudioFormat(ACODEC, ASAMPLERATE, 2);
+        mediaFormat = getMediaFormat();
+        codecName = list.findEncoderForFormat(mediaFormat);
+    }
+
+    /**
+     * @return Media format
+     */
+    public static MediaFormat getMediaFormat() {
+        MediaFormat mediaFormat = MediaFormat.createAudioFormat(ACODEC, ASAMPLERATE, 2);
         mediaFormat.setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC);
         mediaFormat.setInteger(MediaFormat.KEY_BIT_RATE, ABITRATE);
-        mediaFormat.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, mPcmBufferSize);
-        codecName = list.findEncoderForFormat(mediaFormat);
+        mediaFormat.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, PCM_BUFFER_SIZE);
+        return mediaFormat;
     }
 
     /**
@@ -89,7 +93,7 @@ public class SrsAacEncoder {
 
         // Prepare microphone
         mic = new AudioRecord(source, SrsAacEncoder.ASAMPLERATE,
-                AudioFormat.CHANNEL_IN_STEREO, AudioFormat.ENCODING_PCM_16BIT, mPcmBufferSize);
+                AudioFormat.CHANNEL_IN_STEREO, AudioFormat.ENCODING_PCM_16BIT, PCM_BUFFER_SIZE);
         if (mic == null)
             throw new IOException("Specified audio source is not supported by this device");
 
