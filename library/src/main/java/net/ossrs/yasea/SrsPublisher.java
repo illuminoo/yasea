@@ -6,8 +6,6 @@ import android.media.audiofx.AutomaticGainControl;
 import com.github.faucamp.simplertmp.RtmpHandler;
 import com.seu.magicfilter.utils.MagicFilterType;
 
-import java.io.File;
-
 /**
  * Created by Leo Ma on 2016/7/25.
  */
@@ -161,8 +159,9 @@ public class SrsPublisher {
 
     public void startPublish(String rtmpUrl) {
         if (mFlvMuxer != null) {
-            mFlvMuxer.start(rtmpUrl, null, null);
+            mFlvMuxer.setDestination(rtmpUrl, null, null);
             mFlvMuxer.setVideoResolution(mEncoder.getOutputWidth(), mEncoder.getOutputHeight());
+            mFlvMuxer.start();
             startEncode();
         }
     }
@@ -175,7 +174,7 @@ public class SrsPublisher {
     }
 
     public boolean startRecord(String recPath) {
-        return mMp4Muxer != null && mMp4Muxer.record(new File(recPath));
+        return mMp4Muxer != null && mMp4Muxer.record();
     }
 
     public void stopRecord() {
@@ -288,13 +287,6 @@ public class SrsPublisher {
         mFlvMuxer = new SrsFlvMuxer(handler);
         if (mEncoder != null) {
             mEncoder.setFlvMuxer(mFlvMuxer);
-        }
-    }
-
-    public void setRecordHandler(SrsRecordHandler handler) {
-        mMp4Muxer = new SrsMp4Muxer(handler);
-        if (mEncoder != null) {
-            mEncoder.setMp4Muxer(mMp4Muxer);
         }
     }
 
