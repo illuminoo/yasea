@@ -40,6 +40,9 @@ public class SrsFlvMuxer {
     public static final int VIDEO_TRACK = 100;
     public static final int AUDIO_TRACK = 101;
     private static final String TAG = "SrsFlvMuxer";
+    private String url;
+    private String user;
+    private String password;
 
     /**
      * constructor.
@@ -66,6 +69,19 @@ public class SrsFlvMuxer {
      */
     public void setVideoResolution(int width, int height) {
         publisher.setVideoResolution(width, height);
+    }
+
+    /**
+     * Set destination
+     *
+     * @param url      URL of RTMP server
+     * @param user     Username (optional)
+     * @param password Password (optional)
+     */
+    public void setDestination(String url, String user, String password) {
+        this.url = url;
+        this.user = user;
+        this.password = password;
     }
 
     /**
@@ -103,14 +119,15 @@ public class SrsFlvMuxer {
     /**
      * Connect to RTMP endpoint
      *
-     * @param url      URL
-     * @param user     Username
-     * @param password Password
      * @return Is connected
      */
-    public boolean connect(String url, String user, String password) {
-        needToFindKeyFrame = true;
+    public boolean connect() {
+        if (url == null) {
+            Log.e(TAG, "URL is not specified");
+            return false;
+        }
 
+        needToFindKeyFrame = true;
         if (!connected) {
             Log.i(TAG, String.format("Connecting to RTMP server at %s...", url));
             if (publisher.connect(url, user, password)) {
@@ -142,18 +159,14 @@ public class SrsFlvMuxer {
 
     /**
      * Start RTMP muxer
-     *
-     * @param url      URL of endpoint
-     * @param user     Username (optional)
-     * @param password Password (optional)
      */
-    public synchronized void start(String url, String user, String password) {
+    public synchronized void start() {
         flv.reset();
 
         worker = new Thread(() -> {
             Log.i(TAG, "SrsFlvMuxer started");
 
-            if (!connect(url, user, password)) {
+            if (!connect()) {
                 Log.e(TAG, "SrsFlvMuxer disconnected");
                 return;
             }
@@ -227,7 +240,7 @@ public class SrsFlvMuxer {
      */
     public void writeVideoSample(ByteBuffer byteBuf, MediaCodec.BufferInfo bufferInfo) {
         AtomicInteger videoFrameCacheNumber = getVideoFrameCacheNumber();
-        if (videoFrameCacheNumber != null && videoFrameCacheNumber.get() < 60) {
+        if (videoFrameCacheNumber != null && videoFrameCacheNumber.get() < 100) {
             flv.writeVideoSample(byteBuf, bufferInfo);
         } else {
             needToFindKeyFrame = true;
@@ -416,14 +429,6 @@ public class SrsFlvMuxer {
     }
 
     /**
-     * the search result for annexb.
-     */
-    private class SrsAnnexbSearch {
-        public int nb_start_code = 0;
-        public boolean match = false;
-    }
-
-    /**
      * the demuxed tag frame.
      */
     private class SrsFlvFrameBytes {
@@ -469,7 +474,6 @@ public class SrsFlvMuxer {
     private class SrsRawH264Stream {
         private final static String TAG = "SrsFlvMuxer";
 
-        private SrsAnnexbSearch annexb = new SrsAnnexbSearch();
         private SrsFlvFrameBytes nalu_header = new SrsFlvFrameBytes();
         private SrsFlvFrameBytes seq_hdr = new SrsFlvFrameBytes();
         private SrsFlvFrameBytes sps_hdr = new SrsFlvFrameBytes();
@@ -563,13 +567,13 @@ public class SrsFlvMuxer {
             // numOfSequenceParameterSets, always 1
             sps_hdr.data.put((byte) 0x01);
             // sequenceParameterSetLength
-            sps_hdr.data.putShort((short) sps.array().length);
+            sps_hdr.data.putShort((short) sps.capacity());
 
             sps_hdr.data.rewind();
             frames.add(sps_hdr);
 
             // sequenceParameterSetNALUnit
-            sps_bb.size = sps.array().length;
+            sps_bb.size = sps.capacity();
             sps_bb.data = sps.duplicate();
             frames.add(sps_bb);
 
@@ -583,13 +587,13 @@ public class SrsFlvMuxer {
             // numOfPictureParameterSets, always 1
             pps_hdr.data.put((byte) 0x01);
             // pictureParameterSetLength
-            pps_hdr.data.putShort((short) pps.array().length);
+            pps_hdr.data.putShort((short) pps.capacity());
 
             pps_hdr.data.rewind();
             frames.add(pps_hdr);
 
             // pictureParameterSetNALUnit
-            pps_bb.size = pps.array().length;
+            pps_bb.size = pps.capacity();
             pps_bb.data = pps.duplicate();
             frames.add(pps_bb);
         }
@@ -636,71 +640,34 @@ public class SrsFlvMuxer {
             return allocation;
         }
 
-        private SrsAnnexbSearch searchStartcode(ByteBuffer bb, int size) {
-            annexb.match = false;
-            annexb.nb_start_code = 0;
-            if (size - 4 > 0) {
-                if (bb.get(0) == 0x00 && bb.get(1) == 0x00 && bb.get(2) == 0x00 && bb.get(3) == 0x01) {
-                    // match N[00] 00 00 00 01, where N>=0
-                    annexb.match = true;
-                    annexb.nb_start_code = 4;
-                } else if (bb.get(0) == 0x00 && bb.get(1) == 0x00 && bb.get(2) == 0x01) {
-                    // match N[00] 00 00 01, where N>=0
-                    annexb.match = true;
-                    annexb.nb_start_code = 3;
-                }
-            }
-            return annexb;
-        }
+        private int searchAnnexb(ByteBuffer bb) {
+            for (int offset = bb.position(); offset < bb.capacity(); offset++) {
+                int size = bb.capacity() - offset;
 
-        private SrsAnnexbSearch searchAnnexb(ByteBuffer bb, int size) {
-            annexb.match = false;
-            annexb.nb_start_code = 0;
-            for (int i = bb.position(); i < size - 4; i++) {
-                // not match.
-                if (bb.get(i) != 0x00 || bb.get(i + 1) != 0x00) {
-                    continue;
+                // match N[00] 00 00 00 01, where N>=0
+                if (size > 3 && bb.get(offset) == 0x00 && bb.get(offset + 1) == 0x00 && bb.get(offset + 2) == 0x00 && bb.get(offset + 3) == 0x01) {
+                    return offset + 4;
                 }
 
                 // match N[00] 00 00 01, where N>=0
-                if (bb.get(i + 2) == 0x01) {
-                    annexb.match = true;
-                    annexb.nb_start_code = i + 3 - bb.position();
-                    break;
-                }
-                // match N[00] 00 00 00 01, where N>=0
-                if (bb.get(i + 2) == 0x00 && bb.get(i + 3) == 0x01) {
-                    annexb.match = true;
-                    annexb.nb_start_code = i + 4 - bb.position();
-                    break;
+                if (size > 2 && bb.get(offset) == 0x00 && bb.get(offset + 1) == 0x00 && bb.get(offset + 2) == 0x01) {
+                    return offset + 3;
                 }
             }
-
-            return annexb;
+            return -1;
         }
 
-        public SrsFlvFrameBytes demuxAnnexb(ByteBuffer bb, int size, boolean isOnlyChkHeader) {
-            SrsFlvFrameBytes tbb = new SrsFlvFrameBytes();
-            if (bb.position() < size - 4) {
-                // each frame must prefixed by annexb format.
-                // about annexb, @see H.264-AVC-ISO_IEC_14496-10.pdf, page 211.
-                SrsAnnexbSearch tbbsc =
-                        isOnlyChkHeader ? searchStartcode(bb, size) : searchAnnexb(bb, size);
-                // tbbsc.nb_start_code always 4 , after 00 00 00 01
-                if (!tbbsc.match || tbbsc.nb_start_code < 3) {
-                    Log.e(TAG, "annexb not match.");
-                } else {
-
-                    // the start codes.
-                    for (int i = 0; i < tbbsc.nb_start_code; i++) {
-                        bb.get();
-                    }
-
-                    // find out the frame size.
-                    tbb.data = bb.slice();
-                    tbb.size = size - bb.position();
-                }
+        public SrsFlvFrameBytes demuxAnnexb(ByteBuffer bb, int offset) {
+            // Skip annexb header
+            bb.rewind();
+            for (int i = 0; i < offset; i++) {
+                bb.get();
             }
+
+            // Create FLV frame
+            SrsFlvFrameBytes tbb = new SrsFlvFrameBytes();
+            tbb.data = bb.slice();
+            tbb.size = bb.remaining();
             return tbb;
         }
     }
@@ -883,45 +850,56 @@ public class SrsFlvMuxer {
         }
 
         public void writeVideoSample(final ByteBuffer bb, MediaCodec.BufferInfo bi) {
-            if (bi.size < 4) return;
-
             int pts = (int) (bi.presentationTimeUs / 1000);
             int dts = pts;
 
-            int type = SrsCodecVideoAVCFrame.InterFrame;
-            SrsFlvFrameBytes frame = avc.demuxAnnexb(bb, bi.size, true);
-            int nal_unit_type = frame.data.get(0) & 0x1f;
-            if (nal_unit_type == SrsAvcNaluType.IDR) {
-                type = SrsCodecVideoAVCFrame.KeyFrame;
-            } else if (nal_unit_type == SrsAvcNaluType.SPS || nal_unit_type == SrsAvcNaluType.PPS) {
-                if (!frame.data.equals(h264_sps)) {
-                    byte[] sps = new byte[frame.size];
-                    frame.data.get(sps);
+            int offset = avc.searchAnnexb(bb);
+            if (offset < 0) {
+                Log.e(TAG, "Invalid frame, Annex B header missing");
+                return;
+            }
+            int nal_unit_type = bb.get(offset) & 0x1f;
+
+            // SPS/PPS
+            if (nal_unit_type == SrsAvcNaluType.SPS || nal_unit_type == SrsAvcNaluType.PPS) {
+                if (h264_sps_pps_sent) return;
+
+                SrsFlvFrameBytes frame_sps = avc.demuxAnnexb(bb, offset);
+                offset = avc.searchAnnexb(bb);
+                if (offset < 0) {
+                    Log.e(TAG, "Invalid frame, Annex B header for PPS missing");
+                    return;
+                }
+                SrsFlvFrameBytes frame_pps = avc.demuxAnnexb(bb, offset);
+
+                if (h264_sps == null) {
+                    byte[] sps = new byte[frame_sps.size - frame_pps.size - 4];
+                    frame_sps.data.get(sps);
                     h264_sps = ByteBuffer.wrap(sps);
-                    h264_sps_pps_sent = false;
                 }
 
-                SrsFlvFrameBytes frame_pps = avc.demuxAnnexb(bb, bi.size, false);
-                if (frame_pps.size > 0 && !frame_pps.data.equals(h264_pps)) {
-                    byte[] pps = new byte[frame_pps.size];
-                    frame_pps.data.get(pps);
-                    h264_pps = ByteBuffer.wrap(pps);
-                    h264_sps_pps_sent = false;
+                if (h264_pps == null) {
+                    h264_pps = frame_pps.data;
                 }
 
-                if (h264_sps != null && h264_pps != null && !h264_sps_pps_sent) {
+                if (h264_sps != null && h264_pps != null) {
                     writeH264SpsPps(dts, pts);
                     h264_sps_pps_sent = true;
                 }
-                return;
-            } else if (nal_unit_type != SrsAvcNaluType.NonIDR) {
-                return;
             }
 
-            ipbs.add(avc.muxNaluHeader(frame));
-            ipbs.add(frame);
-            writeH264IpbFrame(ipbs, type, dts, pts);
-            ipbs.clear();
+            // IDR/NonIDR
+            if (nal_unit_type == SrsAvcNaluType.IDR || nal_unit_type == SrsAvcNaluType.NonIDR) {
+                SrsFlvFrameBytes frame = avc.demuxAnnexb(bb, offset);
+
+                int type = SrsCodecVideoAVCFrame.InterFrame;
+                if (nal_unit_type == SrsAvcNaluType.IDR) type = SrsCodecVideoAVCFrame.KeyFrame;
+
+                ipbs.add(avc.muxNaluHeader(frame));
+                ipbs.add(frame);
+                writeH264IpbFrame(ipbs, type, dts, pts);
+                ipbs.clear();
+            }
         }
 
         private void writeH264SpsPps(int dts, int pts) {

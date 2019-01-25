@@ -37,7 +37,7 @@ public class SrsMp4Muxer {
     private static final int VIDEO_TRACK = 100;
     private static final int AUDIO_TRACK = 101;
 
-    private File mRecFile;
+    private final File mRecFile;
     private SrsRecordHandler mHandler;
 
     private MediaFormat videoFormat = null;
@@ -79,21 +79,22 @@ public class SrsMp4Muxer {
     /**
      * Constructor
      *
+     * @param output  Output file
      * @param handler Message handler
      */
-    public SrsMp4Muxer(SrsRecordHandler handler) {
+    public SrsMp4Muxer(File output, SrsRecordHandler handler) {
+        mRecFile = output;
         mHandler = handler;
     }
 
     /**
      * start recording.
      */
-    public boolean record(File outputFile) {
+    public boolean record() {
         if (videoFormat == null && audioFormat == null) {
             return false;
         }
 
-        mRecFile = outputFile;
         createMovie(mRecFile);
         mHandler.notifyRecordStarted(mRecFile.getPath());
 
