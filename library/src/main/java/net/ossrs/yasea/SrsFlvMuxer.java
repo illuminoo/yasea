@@ -24,8 +24,6 @@ public class SrsFlvMuxer {
 
     private volatile boolean connected = false;
     private SrsRtmpPublisher publisher;
-    private RtmpHandler mHandler;
-
     private Thread worker;
     private final Object txFrameLock = new Object();
 
@@ -50,7 +48,6 @@ public class SrsFlvMuxer {
      * @param handler the rtmp event handler.
      */
     public SrsFlvMuxer(RtmpHandler handler) {
-        mHandler = handler;
         publisher = new SrsRtmpPublisher(handler);
     }
 
