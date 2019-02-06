@@ -638,25 +638,28 @@ public class SrsFlvMuxer {
         }
 
         private int searchAnnexb(ByteBuffer bb) {
-            for (int offset = bb.position(); offset < bb.capacity(); offset++) {
-                int size = bb.capacity() - offset;
+            while (bb.position() < bb.capacity()) {
+                int offset = bb.position();
+                int size = bb.remaining();
 
                 // match N[00] 00 00 00 01, where N>=0
                 if (size > 3 && bb.get(offset) == 0x00 && bb.get(offset + 1) == 0x00 && bb.get(offset + 2) == 0x00 && bb.get(offset + 3) == 0x01) {
-                    return offset + 4;
+                    return 4;
                 }
 
                 // match N[00] 00 00 01, where N>=0
                 if (size > 2 && bb.get(offset) == 0x00 && bb.get(offset + 1) == 0x00 && bb.get(offset + 2) == 0x01) {
-                    return offset + 3;
+                    return 3;
                 }
+
+                bb.get();
             }
             return -1;
         }
 
         public SrsFlvFrameBytes demuxAnnexb(ByteBuffer bb, int offset) {
+
             // Skip annexb header
-            bb.rewind();
             for (int i = 0; i < offset; i++) {
                 bb.get();
             }
@@ -665,6 +668,7 @@ public class SrsFlvMuxer {
             SrsFlvFrameBytes tbb = new SrsFlvFrameBytes();
             tbb.data = bb.slice();
             tbb.size = bb.remaining();
+
             return tbb;
         }
     }
@@ -859,7 +863,6 @@ public class SrsFlvMuxer {
 
             // SPS/PPS
             if (nal_unit_type == SrsAvcNaluType.SPS || nal_unit_type == SrsAvcNaluType.PPS) {
-                if (h264_sps_pps_sent) return;
 
                 SrsFlvFrameBytes frame_sps = avc.demuxAnnexb(bb, offset);
                 offset = avc.searchAnnexb(bb);
@@ -869,20 +872,18 @@ public class SrsFlvMuxer {
                 }
                 SrsFlvFrameBytes frame_pps = avc.demuxAnnexb(bb, offset);
 
-                if (h264_sps == null) {
-                    byte[] sps = new byte[frame_sps.size - frame_pps.size - 4];
-                    frame_sps.data.get(sps);
-                    h264_sps = ByteBuffer.wrap(sps);
-                }
+                // SPS
+                byte[] sps = new byte[frame_sps.size];
+                frame_sps.data.get(sps);
+                h264_sps = ByteBuffer.wrap(sps);
 
-                if (h264_pps == null) {
-                    h264_pps = frame_pps.data;
-                }
+                // PPS
+                byte[] pps = new byte[frame_pps.size];
+                frame_pps.data.get(pps);
+                h264_pps = ByteBuffer.wrap(pps);
 
-                if (h264_sps != null && h264_pps != null) {
-                    writeH264SpsPps(dts, pts);
-                    h264_sps_pps_sent = true;
-                }
+                writeH264SpsPps(dts, pts);
+                h264_sps_pps_sent = true;
             }
 
             // IDR/NonIDR
