@@ -873,7 +873,7 @@ public class SrsFlvMuxer {
                 SrsFlvFrameBytes frame_pps = avc.demuxAnnexb(bb, offset);
 
                 // SPS
-                byte[] sps = new byte[frame_sps.size];
+                byte[] sps = new byte[frame_sps.size - frame_pps.size - 4];
                 frame_sps.data.get(sps);
                 h264_sps = ByteBuffer.wrap(sps);
 
