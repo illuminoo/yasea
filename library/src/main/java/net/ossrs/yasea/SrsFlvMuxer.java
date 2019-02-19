@@ -7,7 +7,7 @@ import com.github.faucamp.simplertmp.RtmpHandler;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -25,7 +25,6 @@ public class SrsFlvMuxer {
     private volatile boolean connected = false;
     private SrsRtmpPublisher publisher;
     private Thread worker;
-    private final Object txFrameLock = new Object();
 
     public final SrsFlv flv = new SrsFlv();
     public boolean needToFindKeyFrame = true;
@@ -33,7 +32,7 @@ public class SrsFlvMuxer {
     private SrsFlvFrame mAudioSequenceHeader;
     private final SrsAllocator mVideoAllocator = new SrsAllocator(VIDEO_ALLOC_SIZE);
     private final SrsAllocator mAudioAllocator = new SrsAllocator(AUDIO_ALLOC_SIZE);
-    private final ConcurrentLinkedQueue<SrsFlvFrame> mFlvTagCache = new ConcurrentLinkedQueue<>();
+    private final ArrayBlockingQueue<SrsFlvFrame> mFlvTagCache = new ArrayBlockingQueue<>(1000);
 
     public static final int VIDEO_TRACK = 100;
     public static final int AUDIO_TRACK = 101;
@@ -171,8 +170,8 @@ public class SrsFlvMuxer {
 
             Log.i(TAG, "SrsFlvMuxer running");
             while (worker != null) {
-                while (!mFlvTagCache.isEmpty()) {
-                    SrsFlvFrame frame = mFlvTagCache.poll();
+                SrsFlvFrame frame = mFlvTagCache.poll();
+                if (frame != null) {
                     if (frame.isSequenceHeader()) {
                         if (frame.isVideo()) {
                             mVideoSequenceHeader = frame;
@@ -188,15 +187,13 @@ public class SrsFlvMuxer {
                             sendFlvTag(frame);
                         }
                     }
-                }
 
-                // Waiting for next frame
-                synchronized (txFrameLock) {
+                    Thread.yield();
+                } else {
                     try {
-                        // isEmpty() may take some time, so we set timeout to detect next frame
-                        txFrameLock.wait(500);
-                    } catch (InterruptedException ie) {
-                        worker = null;
+                        Thread.sleep(500);
+                    } catch (InterruptedException e) {
+                        // Not used
                     }
                 }
             }
@@ -215,10 +212,6 @@ public class SrsFlvMuxer {
     public synchronized void stop() {
         if (worker != null) {
             worker = null;
-
-            synchronized (txFrameLock) {
-                txFrameLock.notifyAll();
-            }
         }
     }
 
@@ -950,12 +943,8 @@ public class SrsFlvMuxer {
         }
 
         private void flvTagCacheAdd(SrsFlvFrame frame) {
-            mFlvTagCache.add(frame);
-            if (frame.isVideo()) {
+            if (mFlvTagCache.offer(frame) && frame.isVideo()) {
                 getVideoFrameCacheNumber().incrementAndGet();
-            }
-            synchronized (txFrameLock) {
-                txFrameLock.notifyAll();
             }
         }
     }
