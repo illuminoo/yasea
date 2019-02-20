@@ -21,6 +21,7 @@ public class SrsFlvMuxer {
 
     private static final int VIDEO_ALLOC_SIZE = 128 * 1024;
     private static final int AUDIO_ALLOC_SIZE = 4 * 1024;
+    private static final int CACHE_SIZE = 1000;
 
     private volatile boolean connected = false;
     private SrsRtmpPublisher publisher;
@@ -32,7 +33,7 @@ public class SrsFlvMuxer {
     private SrsFlvFrame mAudioSequenceHeader;
     private final SrsAllocator mVideoAllocator = new SrsAllocator(VIDEO_ALLOC_SIZE);
     private final SrsAllocator mAudioAllocator = new SrsAllocator(AUDIO_ALLOC_SIZE);
-    private final ArrayBlockingQueue<SrsFlvFrame> mFlvTagCache = new ArrayBlockingQueue<>(1000);
+    private final ArrayBlockingQueue<SrsFlvFrame> mFlvTagCache = new ArrayBlockingQueue<>(CACHE_SIZE);
 
     public static final int VIDEO_TRACK = 100;
     public static final int AUDIO_TRACK = 101;
@@ -54,7 +55,8 @@ public class SrsFlvMuxer {
      * get cached video frame number in publisher
      */
     public AtomicInteger getVideoFrameCacheNumber() {
-        return publisher.getVideoFrameCacheNumber();
+        // Not used anymore
+        return null;
     }
 
     /**
@@ -229,13 +231,7 @@ public class SrsFlvMuxer {
      * @param bufferInfo The buffer information related to this sample.
      */
     public void writeVideoSample(ByteBuffer byteBuf, MediaCodec.BufferInfo bufferInfo) {
-        AtomicInteger videoFrameCacheNumber = getVideoFrameCacheNumber();
-        if (videoFrameCacheNumber != null && videoFrameCacheNumber.get() < 100) {
-            flv.writeVideoSample(byteBuf, bufferInfo);
-        } else {
-            needToFindKeyFrame = true;
-            Log.w(TAG, "Network throughput too low");
-        }
+        flv.writeVideoSample(byteBuf, bufferInfo);
     }
 
     /**
@@ -723,7 +719,7 @@ public class SrsFlvMuxer {
         }
 
         public void writeAudioSample(final ByteBuffer bb, MediaCodec.BufferInfo bi) {
-            int dts = (int) (bi.presentationTimeUs / 1000);
+            int dts = (int) (bi.presentationTimeUs / CACHE_SIZE);
 
             audio_tag = mAudioAllocator.allocate(bi.size + 2);
             byte aac_packet_type = 1; // 1 = AAC raw
@@ -844,7 +840,7 @@ public class SrsFlvMuxer {
         }
 
         public void writeVideoSample(final ByteBuffer bb, MediaCodec.BufferInfo bi) {
-            int pts = (int) (bi.presentationTimeUs / 1000);
+            int pts = (int) (bi.presentationTimeUs / CACHE_SIZE);
             int dts = pts;
 
             int offset = avc.searchAnnexb(bb);
@@ -943,8 +939,9 @@ public class SrsFlvMuxer {
         }
 
         private void flvTagCacheAdd(SrsFlvFrame frame) {
-            if (mFlvTagCache.offer(frame) && frame.isVideo()) {
-                getVideoFrameCacheNumber().incrementAndGet();
+            if (!mFlvTagCache.offer(frame)) {
+                needToFindKeyFrame = true;
+                Log.w(TAG, "Network throughput too low");
             }
         }
     }

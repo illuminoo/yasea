@@ -1,7 +1,5 @@
 package com.github.faucamp.simplertmp;
 
-import java.util.concurrent.atomic.AtomicInteger;
-
 /**
  * Simple RTMP publisher, using vanilla Java networking (no NIO)
  * This was created primarily to address a NIO bug in Android 2.2 when
@@ -26,7 +24,6 @@ public interface RtmpPublisher {
      *
      * @param publishType specify the way to publish raw RTMP packets among "live", "record" and "append"
      * @return If succeeded return true else return false
-     * @throws IllegalStateException if the client is not connected to a RTMP server
      */
     boolean publish(String publishType);
 
@@ -52,11 +49,6 @@ public interface RtmpPublisher {
      * @param dts  audio stream decoding timestamp
      */
     void publishAudioData(byte[] data, int size, int dts);
-
-    /**
-     * obtain video frame number cached in publisher
-     */
-    AtomicInteger getVideoFrameCacheNumber();
 
     /**
      * obtain the IP address of the peer if any

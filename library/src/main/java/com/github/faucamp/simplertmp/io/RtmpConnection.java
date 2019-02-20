@@ -15,7 +15,6 @@ import java.net.SocketException;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.util.Random;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -52,7 +51,6 @@ public class RtmpConnection implements RtmpPublisher {
     private volatile boolean publishPermitted = false;
     private final Object connectingLock = new Object();
     private final Object publishLock = new Object();
-    private AtomicInteger videoFrameCacheNumber = new AtomicInteger(0);
     private int currentStreamId = 0;
     private int transactionIdCounter = 0;
     private AmfString serverIpAddr;
@@ -423,7 +421,6 @@ public class RtmpConnection implements RtmpPublisher {
         publishType = null;
         currentStreamId = 0;
         transactionIdCounter = 0;
-        videoFrameCacheNumber.set(0);
         socketExceptionCause = "";
         serverIpAddr = null;
         serverPid = null;
@@ -461,7 +458,7 @@ public class RtmpConnection implements RtmpPublisher {
         audio.getHeader().setAbsoluteTimestamp(dts);
         audio.getHeader().setMessageStreamId(currentStreamId);
         sendRtmpPacket(audio);
-        calcAudioBitrate(audio.getHeader().getPacketLength());
+        calcAudioBitrate(audio.getHeader().getPacketLength(), audio.getHeader().getAbsoluteTimestamp());
         mHandler.notifyRtmpAudioStreaming();
     }
 
@@ -488,36 +485,35 @@ public class RtmpConnection implements RtmpPublisher {
         video.getHeader().setAbsoluteTimestamp(dts);
         video.getHeader().setMessageStreamId(currentStreamId);
         sendRtmpPacket(video);
-        videoFrameCacheNumber.decrementAndGet();
-        calcVideoFpsAndBitrate(video.getHeader().getPacketLength());
+        calcVideoFpsAndBitrate(video.getHeader().getPacketLength(), video.getHeader().getAbsoluteTimestamp());
         mHandler.notifyRtmpVideoStreaming();
     }
 
-    private void calcVideoFpsAndBitrate(int length) {
+    private void calcVideoFpsAndBitrate(int length, int pts) {
         videoDataLength += length;
         if (videoFrameCount == 0) {
-            videoLastTimeMillis = System.nanoTime() / 1000000;
+            videoLastTimeMillis = pts;
             videoFrameCount++;
         } else {
             if (++videoFrameCount >= 60) {
-                long diffTimeMillis = System.nanoTime() / 1000000 - videoLastTimeMillis;
-                mHandler.notifyRtmpVideoFpsChanged((double) videoFrameCount * 1000 / diffTimeMillis);
-                mHandler.notifyRtmpVideoBitrateChanged((double) videoDataLength * 8 * 1000 / diffTimeMillis);
+                long diffTimeMillis = pts - videoLastTimeMillis;
+                mHandler.notifyRtmpVideoFpsChanged(videoFrameCount * 1000d / diffTimeMillis);
+                mHandler.notifyRtmpVideoBitrateChanged(videoDataLength * 8000d / diffTimeMillis);
                 videoFrameCount = 0;
                 videoDataLength = 0;
             }
         }
     }
 
-    private void calcAudioBitrate(int length) {
+    private void calcAudioBitrate(int length, int pts) {
         audioDataLength += length;
         if (audioFrameCount == 0) {
-            audioLastTimeMillis = System.nanoTime() / 1000000;
+            audioLastTimeMillis = pts;
             audioFrameCount++;
         } else {
             if (++audioFrameCount >= 60) {
-                long diffTimeMillis = System.nanoTime() / 1000000 - audioLastTimeMillis;
-                mHandler.notifyRtmpAudioBitrateChanged((double) audioDataLength * 8 * 1000 / diffTimeMillis);
+                long diffTimeMillis = pts - audioLastTimeMillis;
+                mHandler.notifyRtmpAudioBitrateChanged(audioDataLength * 8000d / diffTimeMillis);
                 audioFrameCount = 0;
                 audioDataLength = 0;
             }
@@ -760,11 +756,6 @@ public class RtmpConnection implements RtmpPublisher {
         info += serverPid == null ? "" : " pid: " + (int) serverPid.getValue();
         info += serverId == null ? "" : " id: " + (int) serverId.getValue();
         return info;
-    }
-
-    @Override
-    public AtomicInteger getVideoFrameCacheNumber() {
-        return videoFrameCacheNumber;
     }
 
     @Override
