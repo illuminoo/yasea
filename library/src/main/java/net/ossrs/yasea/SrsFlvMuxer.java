@@ -160,6 +160,7 @@ public class SrsFlvMuxer {
      */
     public synchronized void start() {
         flv.reset();
+        mFlvTagCache.clear();
 
         worker = new Thread(() -> {
             Log.i(TAG, "SrsFlvMuxer started");
@@ -934,7 +935,7 @@ public class SrsFlvMuxer {
                     flvTagCacheAdd(frame);
                 }
             } else if (frame.isAudio()) {
-                flvTagCacheAdd(frame);
+                if (!needToFindKeyFrame) flvTagCacheAdd(frame);
             }
         }
 

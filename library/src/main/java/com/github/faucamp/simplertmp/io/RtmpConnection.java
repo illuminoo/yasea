@@ -137,6 +137,7 @@ public class RtmpConnection implements RtmpPublisher {
                 socket = socketFactory.createSocket(host, port);
                 if (socket == null) throw new IOException("Socket creation failed");
             }
+            socket.setSoLinger(false, 0);
 
             inputStream = new BufferedInputStream(socket.getInputStream());
             outputStream = new BufferedOutputStream(socket.getOutputStream());
@@ -433,6 +434,10 @@ public class RtmpConnection implements RtmpPublisher {
         salt = null;
         challenge = null;
         opaque = null;
+        videoFrameCount = 0;
+        videoDataLength = 0;
+        audioFrameCount = 0;
+        audioDataLength = 0;
     }
 
     @Override
@@ -458,7 +463,7 @@ public class RtmpConnection implements RtmpPublisher {
         audio.getHeader().setAbsoluteTimestamp(dts);
         audio.getHeader().setMessageStreamId(currentStreamId);
         sendRtmpPacket(audio);
-        calcAudioBitrate(audio.getHeader().getPacketLength(), audio.getHeader().getAbsoluteTimestamp());
+        calcAudioBitrate(audio.getHeader().getPacketLength(), dts);
         mHandler.notifyRtmpAudioStreaming();
     }
 
@@ -485,7 +490,7 @@ public class RtmpConnection implements RtmpPublisher {
         video.getHeader().setAbsoluteTimestamp(dts);
         video.getHeader().setMessageStreamId(currentStreamId);
         sendRtmpPacket(video);
-        calcVideoFpsAndBitrate(video.getHeader().getPacketLength(), video.getHeader().getAbsoluteTimestamp());
+        calcVideoFpsAndBitrate(video.getHeader().getPacketLength(), dts);
         mHandler.notifyRtmpVideoStreaming();
     }
 
