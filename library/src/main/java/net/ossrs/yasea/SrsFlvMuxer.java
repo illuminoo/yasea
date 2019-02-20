@@ -720,7 +720,7 @@ public class SrsFlvMuxer {
         }
 
         public void writeAudioSample(final ByteBuffer bb, MediaCodec.BufferInfo bi) {
-            int dts = (int) (bi.presentationTimeUs / CACHE_SIZE);
+            int dts = (int) (bi.presentationTimeUs / 1000);
 
             audio_tag = mAudioAllocator.allocate(bi.size + 2);
             byte aac_packet_type = 1; // 1 = AAC raw
@@ -841,7 +841,7 @@ public class SrsFlvMuxer {
         }
 
         public void writeVideoSample(final ByteBuffer bb, MediaCodec.BufferInfo bi) {
-            int pts = (int) (bi.presentationTimeUs / CACHE_SIZE);
+            int pts = (int) (bi.presentationTimeUs / 1000);
             int dts = pts;
 
             int offset = avc.searchAnnexb(bb);
