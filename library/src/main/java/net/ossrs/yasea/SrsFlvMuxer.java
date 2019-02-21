@@ -159,6 +159,8 @@ public class SrsFlvMuxer {
      * Start RTMP muxer
      */
     public synchronized void start() {
+        if (worker != null) throw new RuntimeException("SrsFlvMuxer is already running");
+
         flv.reset();
         mFlvTagCache.clear();
 
@@ -173,36 +175,34 @@ public class SrsFlvMuxer {
 
             Log.i(TAG, "SrsFlvMuxer running");
             while (worker != null) {
-                SrsFlvFrame frame = mFlvTagCache.poll();
-                if (frame != null) {
-                    if (frame.isSequenceHeader()) {
-                        if (frame.isVideo()) {
-                            mVideoSequenceHeader = frame;
-                            sendFlvTag(mVideoSequenceHeader);
-                        } else if (frame.isAudio()) {
-                            mAudioSequenceHeader = frame;
-                            sendFlvTag(mAudioSequenceHeader);
-                        }
-                    } else {
-                        if (frame.isVideo() && mVideoSequenceHeader != null) {
-                            sendFlvTag(frame);
-                        } else if (frame.isAudio() && mAudioSequenceHeader != null) {
-                            sendFlvTag(frame);
+                try {
+                    SrsFlvFrame frame = mFlvTagCache.take();
+                    if (frame != null) {
+                        if (frame.isSequenceHeader()) {
+                            if (frame.isVideo()) {
+                                mVideoSequenceHeader = frame;
+                                sendFlvTag(mVideoSequenceHeader);
+                            } else if (frame.isAudio()) {
+                                mAudioSequenceHeader = frame;
+                                sendFlvTag(mAudioSequenceHeader);
+                            }
+                        } else {
+                            if (frame.isVideo() && mVideoSequenceHeader != null) {
+                                sendFlvTag(frame);
+                            } else if (frame.isAudio() && mAudioSequenceHeader != null) {
+                                sendFlvTag(frame);
+                            }
                         }
                     }
-
                     Thread.yield();
-                } else {
-                    try {
-                        Thread.sleep(500);
-                    } catch (InterruptedException e) {
-                        // Not used
-                    }
+                } catch (InterruptedException e) {
+                    break;
                 }
             }
 
             disconnect();
             Log.i(TAG, "SrsFlvMuxer stopped");
+            worker = null;
         });
         worker.setPriority(7);
         worker.setDaemon(true);
@@ -214,7 +214,9 @@ public class SrsFlvMuxer {
      */
     public synchronized void stop() {
         if (worker != null) {
+            Thread oldWorker = worker;
             worker = null;
+            oldWorker.interrupt();
         }
     }
 
@@ -935,7 +937,7 @@ public class SrsFlvMuxer {
                     flvTagCacheAdd(frame);
                 }
             } else if (frame.isAudio()) {
-                if (!needToFindKeyFrame) flvTagCacheAdd(frame);
+                flvTagCacheAdd(frame);
             }
         }
 
