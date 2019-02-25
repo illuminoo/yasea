@@ -7,7 +7,7 @@ import com.github.faucamp.simplertmp.RtmpHandler;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -21,11 +21,11 @@ public class SrsFlvMuxer {
 
     private static final int VIDEO_ALLOC_SIZE = 128 * 1024;
     private static final int AUDIO_ALLOC_SIZE = 4 * 1024;
+    private static final int CACHE_SIZE = 1000;
 
     private volatile boolean connected = false;
     private SrsRtmpPublisher publisher;
     private Thread worker;
-    private final Object txFrameLock = new Object();
 
     public final SrsFlv flv = new SrsFlv();
     public boolean needToFindKeyFrame = true;
@@ -33,7 +33,7 @@ public class SrsFlvMuxer {
     private SrsFlvFrame mAudioSequenceHeader;
     private final SrsAllocator mVideoAllocator = new SrsAllocator(VIDEO_ALLOC_SIZE);
     private final SrsAllocator mAudioAllocator = new SrsAllocator(AUDIO_ALLOC_SIZE);
-    private final ConcurrentLinkedQueue<SrsFlvFrame> mFlvTagCache = new ConcurrentLinkedQueue<>();
+    private final ArrayBlockingQueue<SrsFlvFrame> mFlvTagCache = new ArrayBlockingQueue<>(CACHE_SIZE);
 
     public static final int VIDEO_TRACK = 100;
     public static final int AUDIO_TRACK = 101;
@@ -55,7 +55,8 @@ public class SrsFlvMuxer {
      * get cached video frame number in publisher
      */
     public AtomicInteger getVideoFrameCacheNumber() {
-        return publisher.getVideoFrameCacheNumber();
+        // Not used anymore
+        return null;
     }
 
     /**
@@ -158,7 +159,10 @@ public class SrsFlvMuxer {
      * Start RTMP muxer
      */
     public synchronized void start() {
+        if (worker != null) throw new RuntimeException("SrsFlvMuxer is already running");
+
         flv.reset();
+        mFlvTagCache.clear();
 
         worker = new Thread(() -> {
             Log.i(TAG, "SrsFlvMuxer started");
@@ -171,38 +175,34 @@ public class SrsFlvMuxer {
 
             Log.i(TAG, "SrsFlvMuxer running");
             while (worker != null) {
-                while (!mFlvTagCache.isEmpty()) {
-                    SrsFlvFrame frame = mFlvTagCache.poll();
-                    if (frame.isSequenceHeader()) {
-                        if (frame.isVideo()) {
-                            mVideoSequenceHeader = frame;
-                            sendFlvTag(mVideoSequenceHeader);
-                        } else if (frame.isAudio()) {
-                            mAudioSequenceHeader = frame;
-                            sendFlvTag(mAudioSequenceHeader);
-                        }
-                    } else {
-                        if (frame.isVideo() && mVideoSequenceHeader != null) {
-                            sendFlvTag(frame);
-                        } else if (frame.isAudio() && mAudioSequenceHeader != null) {
-                            sendFlvTag(frame);
+                try {
+                    SrsFlvFrame frame = mFlvTagCache.take();
+                    if (frame != null) {
+                        if (frame.isSequenceHeader()) {
+                            if (frame.isVideo()) {
+                                mVideoSequenceHeader = frame;
+                                sendFlvTag(mVideoSequenceHeader);
+                            } else if (frame.isAudio()) {
+                                mAudioSequenceHeader = frame;
+                                sendFlvTag(mAudioSequenceHeader);
+                            }
+                        } else {
+                            if (frame.isVideo() && mVideoSequenceHeader != null) {
+                                sendFlvTag(frame);
+                            } else if (frame.isAudio() && mAudioSequenceHeader != null) {
+                                sendFlvTag(frame);
+                            }
                         }
                     }
-                }
-
-                // Waiting for next frame
-                synchronized (txFrameLock) {
-                    try {
-                        // isEmpty() may take some time, so we set timeout to detect next frame
-                        txFrameLock.wait(500);
-                    } catch (InterruptedException ie) {
-                        worker = null;
-                    }
+                    Thread.yield();
+                } catch (InterruptedException e) {
+                    break;
                 }
             }
 
             disconnect();
             Log.i(TAG, "SrsFlvMuxer stopped");
+            worker = null;
         });
         worker.setPriority(7);
         worker.setDaemon(true);
@@ -214,11 +214,9 @@ public class SrsFlvMuxer {
      */
     public synchronized void stop() {
         if (worker != null) {
+            Thread oldWorker = worker;
             worker = null;
-
-            synchronized (txFrameLock) {
-                txFrameLock.notifyAll();
-            }
+            oldWorker.interrupt();
         }
     }
 
@@ -236,13 +234,7 @@ public class SrsFlvMuxer {
      * @param bufferInfo The buffer information related to this sample.
      */
     public void writeVideoSample(ByteBuffer byteBuf, MediaCodec.BufferInfo bufferInfo) {
-        AtomicInteger videoFrameCacheNumber = getVideoFrameCacheNumber();
-        if (videoFrameCacheNumber != null && videoFrameCacheNumber.get() < 100) {
-            flv.writeVideoSample(byteBuf, bufferInfo);
-        } else {
-            needToFindKeyFrame = true;
-            Log.w(TAG, "Network throughput too low");
-        }
+        flv.writeVideoSample(byteBuf, bufferInfo);
     }
 
     /**
@@ -950,12 +942,9 @@ public class SrsFlvMuxer {
         }
 
         private void flvTagCacheAdd(SrsFlvFrame frame) {
-            mFlvTagCache.add(frame);
-            if (frame.isVideo()) {
-                getVideoFrameCacheNumber().incrementAndGet();
-            }
-            synchronized (txFrameLock) {
-                txFrameLock.notifyAll();
+            if (!mFlvTagCache.offer(frame)) {
+                needToFindKeyFrame = true;
+                Log.w(TAG, "Network throughput too low");
             }
         }
     }

@@ -463,7 +463,7 @@ public class SrsEncoder {
                 } else {
                     mHandler.notifyEncodeIllegalArgumentException(new IllegalArgumentException("libyuv failure"));
                 }
-    }
+            }
 
             if (networkWeakTriggered) {
                 networkWeakTriggered = false;
