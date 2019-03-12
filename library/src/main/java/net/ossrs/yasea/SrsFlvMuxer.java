@@ -943,8 +943,8 @@ public class SrsFlvMuxer {
 
         private void flvTagCacheAdd(SrsFlvFrame frame) {
             if (!mFlvTagCache.offer(frame)) {
-                needToFindKeyFrame = true;
-                Log.w(TAG, "Network throughput too low");
+                Log.e(TAG, "Network throughput too low, disconnecting...");
+                publisher.close();
             }
         }
     }
