@@ -350,8 +350,8 @@ public class RtmpConnection implements RtmpPublisher {
     public void close() {
         if (socket != null) {
             closeStream();
+            shutdown();
         }
-        shutdown();
     }
 
     private void closeStream() {
@@ -377,38 +377,39 @@ public class RtmpConnection implements RtmpPublisher {
     }
 
     private void shutdown() {
-        if (socket != null) {
-            try {
-                // It will raise EOFException in handleRxPacketThread
-                socket.shutdownInput();
+        if (socket == null) return;
 
-                // It will raise SocketException in sendRtmpPacket
-                socket.shutdownOutput();
-            } catch (IOException | UnsupportedOperationException e) {
-                e.printStackTrace();
-            }
+        try {
+            // It will raise EOFException in handleRxPacketThread
+            socket.shutdownInput();
 
-            // shutdown rxPacketHandler
-            if (rxPacketHandler != null) {
-                rxPacketHandler.interrupt();
-                try {
-                    rxPacketHandler.join(1000);
-                } catch (InterruptedException ie) {
-                    rxPacketHandler.interrupt();
-                }
-                rxPacketHandler = null;
-            }
-
-            // shutdown socket as well as its input and output stream
-            try {
-                socket.close();
-                Log.d(TAG, "socket closed");
-            } catch (IOException ex) {
-                Log.e(TAG, "shutdown(): failed to close socket", ex);
-            }
-
-            mHandler.notifyRtmpDisconnected();
+            // It will raise SocketException in sendRtmpPacket
+            socket.shutdownOutput();
+        } catch (IOException | UnsupportedOperationException e) {
+            e.printStackTrace();
         }
+
+        // shutdown rxPacketHandler
+        if (rxPacketHandler != null) {
+            rxPacketHandler.interrupt();
+            try {
+                rxPacketHandler.join(1000);
+            } catch (InterruptedException ie) {
+                rxPacketHandler.interrupt();
+            }
+            rxPacketHandler = null;
+        }
+
+        // shutdown socket as well as its input and output stream
+        try {
+            socket.close();
+            Log.d(TAG, "socket closed");
+        } catch (IOException ex) {
+            Log.e(TAG, "shutdown(): failed to close socket", ex);
+        }
+        socket = null;
+        connected = false;
+        mHandler.notifyRtmpDisconnected();
     }
 
     private void reset() {
