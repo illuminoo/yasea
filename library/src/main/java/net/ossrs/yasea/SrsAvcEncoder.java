@@ -10,10 +10,7 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Rect;
-import android.media.Image;
-import android.media.MediaCodec;
-import android.media.MediaCodecInfo;
-import android.media.MediaFormat;
+import android.media.*;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.util.Log;
@@ -56,7 +53,7 @@ public class SrsAvcEncoder {
 
     public MediaFormat mediaFormat;
     private final MediaCodec.BufferInfo vebi = new MediaCodec.BufferInfo();
-    //    private final String codecName;
+    private final String codecName;
     private MediaCodec vencoder;
 
     private final int inWidth;
@@ -125,9 +122,9 @@ public class SrsAvcEncoder {
 //        setEncoderBitrate(vBitrate);
 //        setEncoderPreset("veryfast");
 
-//        MediaCodecList list = new MediaCodecList(MediaCodecList.REGULAR_CODECS);
+        MediaCodecList list = new MediaCodecList(MediaCodecList.REGULAR_CODECS);
         mediaFormat = getMediaFormat(outWidth, outHeight, vFps, vBitrate);
-//        codecName = list.findEncoderForFormat(mediaFormat);
+        codecName = list.findEncoderForFormat(mediaFormat);
     }
 
     /**
@@ -155,8 +152,7 @@ public class SrsAvcEncoder {
      */
     public void start() throws IOException {
         try {
-//            vencoder = MediaCodec.createByCodecName(codecName);
-            vencoder = MediaCodec.createEncoderByType(CODEC);
+            vencoder = MediaCodec.createByCodecName(codecName);
             vencoder.configure(mediaFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
             if (handler != null) {
                 videoThread = new HandlerThread("Video");

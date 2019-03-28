@@ -30,7 +30,7 @@ public class SrsAacEncoder {
 
     private final byte[] mPcmBuffer;
     public final MediaFormat mediaFormat;
-    //    private final String codecName;
+    private final String codecName;
     private final int source;
 
     private MediaCodec aencoder;
@@ -68,9 +68,9 @@ public class SrsAacEncoder {
         this.source = source;
         mPcmBuffer = new byte[PCM_BUFFER_SIZE];
 
-//        MediaCodecList list = new MediaCodecList(MediaCodecList.REGULAR_CODECS);
+        MediaCodecList list = new MediaCodecList(MediaCodecList.REGULAR_CODECS);
         mediaFormat = getMediaFormat();
-//        codecName = list.findEncoderForFormat(mediaFormat);
+        codecName = list.findEncoderForFormat(mediaFormat);
     }
 
     /**
@@ -110,8 +110,7 @@ public class SrsAacEncoder {
 
         // Start Audio encoder
         try {
-//            aencoder = MediaCodec.createByCodecName(codecName);
-            aencoder = MediaCodec.createEncoderByType(ACODEC);
+            aencoder = MediaCodec.createByCodecName(codecName);
             aencoder.configure(mediaFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
             if (handler != null) {
                 audioThread = new HandlerThread("Audio");
