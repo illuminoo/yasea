@@ -21,7 +21,7 @@ public class SrsFlvMuxer {
 
     private static final int VIDEO_ALLOC_SIZE = 128 * 1024;
     private static final int AUDIO_ALLOC_SIZE = 4 * 1024;
-    private static final int CACHE_SIZE = 1000;
+    private static final int CACHE_SIZE = 2048;
 
     private volatile boolean connected = false;
     private SrsRtmpPublisher publisher;
@@ -943,8 +943,9 @@ public class SrsFlvMuxer {
 
         private void flvTagCacheAdd(SrsFlvFrame frame) {
             if (!mFlvTagCache.offer(frame)) {
-                Log.e(TAG, "Network throughput too low, disconnecting...");
-                publisher.close();
+                if (!needToFindKeyFrame) Log.e(TAG, "Network throughput too low...");
+                else needToFindKeyFrame = true;
+//                publisher.close();
             }
         }
     }
