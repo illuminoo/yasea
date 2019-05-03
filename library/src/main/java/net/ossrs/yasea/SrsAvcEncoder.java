@@ -10,7 +10,11 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Rect;
-import android.media.*;
+import android.media.Image;
+import android.media.MediaCodec;
+import android.media.MediaCodecInfo;
+import android.media.MediaCodecList;
+import android.media.MediaFormat;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.util.Log;
@@ -115,7 +119,7 @@ public class SrsAvcEncoder {
 
         vFps = fps;
         vGop = 2 * fps;
-        vBitrate = bitrate * 1024;
+        vBitrate = bitrate;
 
 //        setEncoderFps(vFps);
 //        setEncoderGop(vGop);
@@ -139,7 +143,7 @@ public class SrsAvcEncoder {
     public static MediaFormat getMediaFormat(int width, int height, int fps, int bitrate) {
         MediaFormat mediaFormat = MediaFormat.createVideoFormat(CODEC, width, height);
         mediaFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT, DEFAULT_COLOR_FORMAT);
-        mediaFormat.setInteger(MediaFormat.KEY_BIT_RATE, bitrate);
+        mediaFormat.setInteger(MediaFormat.KEY_BIT_RATE, bitrate * 1000);
         mediaFormat.setInteger(MediaFormat.KEY_FRAME_RATE, fps);
         mediaFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 2);
         return mediaFormat;
